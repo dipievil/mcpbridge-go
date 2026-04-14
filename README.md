@@ -21,10 +21,10 @@ Get the latest release for your platform:
 ```bash
 
 # Download the binary
-wget https://github.com/dipievil/mcpbridge-go/releases/download/v1.0.0/mcpbridgego-linux-amd64
+wget https://github.com/dipievil/mcpbridge-go/releases/download/v1.0.0/mcpbridgego
 
-# Make executable (Linux/macOS)
-chmod +x mcpbridgego-*
+# Make executable
+chmod +x mcpbridgego
 ```
 
 ### 2. Configure
