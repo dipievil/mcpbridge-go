@@ -1,0 +1,15 @@
+server:
+  host: "0.0.0.0"
+
+mcps:
+  - name: "proxmox"
+    port: 3000
+    command: "node"
+    args: ["/opt/mcps/mcp-proxmox/dist/index.js"]
+    env_file: "/opt/mcps/mcp-proxmox/.env"
+  
+  - name: "loki"
+    port: 3001
+    command: "node"
+    args: ["/opt/mcps/simple-loki-mcp/dist/index.js"]
+    env_file: "/opt/mcps/simple-loki-mcp/.env"
