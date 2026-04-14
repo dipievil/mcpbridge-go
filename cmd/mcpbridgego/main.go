@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"os/exec"
@@ -39,6 +40,7 @@ func (b *Bridge) handleSSE(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Connection", "keep-alive")
 
 	b.mu.Lock()
+
 	envs, _ := godotenv.Read(b.config.EnvFile)
 
 	b.cmd = exec.Command(b.config.Command, b.config.Args...)
@@ -96,6 +98,28 @@ func main() {
 	data, err := os.ReadFile(configFile)
 	if err != nil {
 		log.Fatal("Error reading config file: ", err)
+	}
+
+	var tempConfig Config
+	yaml.Unmarshal(data, &tempConfig)
+	for _, mcp := range tempConfig.MCPS {
+		if _, err := os.Stat(mcp.EnvFile); os.IsNotExist(err) {
+			log.Fatalf("Env file %s for MCP %s does not exist. Check yaml file.", mcp.EnvFile, mcp.Name)
+		}
+	}
+
+	for _, mcp := range tempConfig.MCPS {
+		ln, err := net.Listen("tcp", fmt.Sprintf(":%d", mcp.Port))
+		if err != nil {
+			log.Fatalf("Port %d for MCP %s is not available. Check if another process is using it.", mcp.Port, mcp.Name)
+		}
+		ln.Close()
+	}
+
+	for _, mcp := range tempConfig.MCPS {
+		if _, err := exec.LookPath(mcp.Command); err != nil {
+			log.Fatalf("Command %s for MCP %s not found in PATH. Check yaml file.", mcp.Command, mcp.Name)
+		}
 	}
 
 	var config Config
