@@ -1,0 +1,65 @@
+kind: pipeline
+type: docker
+name: build-and-test
+
+trigger:
+  branch:
+    - main
+  event:
+    - push
+    - pull_request
+
+steps:
+  - name: setup
+    image: golang:1.26.2-alpine
+    commands:
+      - apk add --no-cache git make
+      - go mod download
+
+  - name: lint
+    image: golang:1.26.2-alpine
+    commands:
+      - go fmt ./...
+      - go vet ./...
+
+  - name: test
+    image: golang:1.26.2-alpine
+    commands:
+      - go test -v -race -coverpkg=./... ./...
+
+  - name: build
+    image: golang:1.26.2-alpine
+    commands:
+      - make build
+    when:
+      event:
+        - push
+        - pull_request
+
+---
+kind: pipeline
+type: docker
+name: release
+
+trigger:
+  ref:
+    - refs/tags/v*
+
+steps:
+  - name: build
+    image: golang:1.26.2-alpine
+    commands:
+      - apk add --no-cache make
+      - make build
+
+  - name: publish-release
+    image: plugins/github-release
+    settings:
+      api_key:
+        from_secret: github_token
+      files:
+        - bin/*
+      checksum: sha256
+    when:
+      ref:
+        - refs/tags/v*
