@@ -74,12 +74,14 @@ func NewBridge(cfg MCPConfig) (*Bridge, error) {
 
 	envs := make(map[string]string)
 
-	existsEnvFile, err := os.Stat(cfg.EnvFile)
-	if err != nil || existsEnvFile.IsDir() {
-		log.Printf("Warning: env file %s for MCP %s does not exist or is a directory. Skipping env file loading.", cfg.EnvFile, cfg.Name)
-	} else {
-		envs, _ = godotenv.Read(cfg.EnvFile)
-		maps.Copy(envs, cfg.EnvVars)
+	if cfg.EnvFile != "" {
+		existsEnvFile, err := os.Stat(cfg.EnvFile)
+		if err != nil || existsEnvFile.IsDir() {
+			log.Printf("Warning: env file %s for MCP %s does not exist or is a directory. Skipping env file loading.", cfg.EnvFile, cfg.Name)
+		} else {
+			envs, _ = godotenv.Read(cfg.EnvFile)
+			maps.Copy(envs, cfg.EnvVars)
+		}
 	}
 
 	maps.Copy(envs, cfg.EnvVars)
