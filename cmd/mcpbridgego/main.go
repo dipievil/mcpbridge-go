@@ -148,7 +148,7 @@ func startDaemon(configFile string) error {
 	fmt.Printf("MCPBridge started in background (PID: %d)\n", cmd.Process.Pid)
 
 	// Display startup info before exiting
-	output.DisplayAgentCfgInfo()
+	output.DisplayAgentCfgInfo(configFile)
 
 	// Do NOT explicitly release lock - daemon will manage it
 	// The lock file ownership transfers to daemon which will clean it up on exit

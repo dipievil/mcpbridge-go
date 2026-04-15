@@ -3,9 +3,13 @@ package output
 import (
 	"encoding/json"
 	"fmt"
+	"net"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"dipievil/mcpbridgego/internal/bridge"
+	"gopkg.in/yaml.v3"
 )
 
 const (
@@ -180,19 +184,79 @@ func PrintOutputUsage() {
 `, ColorBold, ColorReset, ColorBold, ColorReset, ColorBold, ColorReset)
 }
 
-// DisplayAgentCfgInfo displays startup information when MCPBridge starts in background mode
-// Shows the generic MCP configuration and instructions for configuration export
-func DisplayAgentCfgInfo() {
+// getLocalIPForServer returns the local IP address to use for MCP servers
+// Tries to find a non-loopback IPv4 address
+func getLocalIPForServer() string {
+	// Default to localhost if we can't find a better IP
+	// This will be used when binding to 0.0.0.0
+	defaultIP := "localhost"
 
+	addrs, err := net.InterfaceAddrs()
+	if err != nil {
+		return defaultIP
+	}
+
+	for _, addr := range addrs {
+		if ipnet, ok := addr.(*net.IPNet); ok && !ipnet.IP.IsLoopback() {
+			if ipv4 := ipnet.IP.To4(); ipv4 != nil {
+				return ipv4.String()
+			}
+		}
+	}
+
+	return defaultIP
+}
+
+// GenerateDynamicMCPConfig generates MCP configuration from config file
+// Returns JSON representation of MCP servers
+func GenerateDynamicMCPConfig(configFile string) (map[string]interface{}, error) {
+	data, err := os.ReadFile(configFile)
+	if err != nil {
+		return nil, fmt.Errorf("error reading config file: %v", err)
+	}
+
+	var config bridge.Config
+	if err := yaml.Unmarshal(data, &config); err != nil {
+		return nil, fmt.Errorf("error parsing config file: %v", err)
+	}
+
+	// Get the local IP for the server
+	localIP := getLocalIPForServer()
+
+	// Build servers map from MCPs
+	servers := make(map[string]interface{})
+	for _, mcp := range config.MCPS {
+		url := fmt.Sprintf("http://%s:%d", localIP, mcp.Port)
+		servers[mcp.Name] = map[string]interface{}{
+			"url": url,
+		}
+	}
+
+	return map[string]interface{}{
+		"servers": servers,
+	}, nil
+}
+
+// DisplayAgentCfgInfo displays startup information when MCPBridge starts in background mode
+// Shows the dynamic MCP configuration based on the config file
+func DisplayAgentCfgInfo(configFile string) {
 	fmt.Println()
 	fmt.Printf("%sMCP Configuration for your agents:%s\n", ColorBold, ColorBlue)
 	fmt.Println()
 
-	outputCfg := OutputConfig{
-		Agent:  "generic",
-		IsFile: false,
+	// Generate dynamic configuration from config file
+	config, err := GenerateDynamicMCPConfig(configFile)
+	if err != nil {
+		fmt.Printf("%sWarning: Could not generate configuration: %v%s\n", ColorYellow, err, ColorReset)
+		return
 	}
-	if err := OutputMCPConfig(outputCfg); err != nil {
-		fmt.Printf("%sWarning: Could not display configuration: %v%s\n", ColorYellow, err, ColorReset)
+
+	// Marshal to JSON
+	jsonData, err := json.MarshalIndent(config, "", "  ")
+	if err != nil {
+		fmt.Printf("%sWarning: Could not marshal configuration: %v%s\n", ColorYellow, err, ColorReset)
+		return
 	}
+
+	outputToScreen(jsonData)
 }
