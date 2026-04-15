@@ -44,4 +44,3 @@ go.work
 *.tmp
 Thumbs.db
 config.yaml
-mcpbridgego
