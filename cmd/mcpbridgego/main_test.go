@@ -2,8 +2,6 @@ package main
 
 import (
 	"encoding/json"
-	"os"
-	"path/filepath"
 	"testing"
 	"time"
 
@@ -60,71 +58,6 @@ func TestJSONRPCErrorMarshaling(t *testing.T) {
 
 	if unmarshaled.Message != errResp.Message {
 		t.Errorf("expected message %s, got %s", errResp.Message, unmarshaled.Message)
-	}
-}
-
-func TestPIDFileHandling(t *testing.T) {
-	pidFile := getPIDFile()
-
-	// Save PID
-	if err := savePID(); err != nil {
-		t.Fatalf("failed to save PID: %v", err)
-	}
-
-	// Verify file was created
-	if _, err := os.Stat(pidFile); err != nil {
-		t.Errorf("PID file not created at %s", pidFile)
-	}
-
-	// Read PID
-	pid, err := readPID()
-	if err != nil {
-		t.Fatalf("failed to read PID: %v", err)
-	}
-
-	expectedPID := os.Getpid()
-	if pid != expectedPID {
-		t.Errorf("expected PID %d, got %d", expectedPID, pid)
-	}
-
-	// Cleanup
-	if err := removePIDFile(); err != nil {
-		t.Fatalf("failed to remove PID file: %v", err)
-	}
-
-	// Verify file was removed
-	if _, err := os.Stat(pidFile); !os.IsNotExist(err) {
-		t.Errorf("PID file still exists after removal")
-	}
-}
-
-func TestGetPIDFile(t *testing.T) {
-	pidFile := getPIDFile()
-
-	if pidFile == "" {
-		t.Error("PID file path is empty")
-	}
-
-	// Should be either /var/run/mcpbridgego.pid or in temp directory
-	if pidFile != "/var/run/mcpbridgego.pid" {
-		tempDir := os.TempDir()
-		if !filepath.HasPrefix(pidFile, tempDir) {
-			t.Errorf("PID file should be in /var/run or temp directory, got %s", pidFile)
-		}
-	}
-}
-
-func TestIsProcessRunning(t *testing.T) {
-	// Current process should be running
-	currentPID := os.Getpid()
-	if !isProcessRunning(currentPID) {
-		t.Errorf("current process (PID %d) should be running", currentPID)
-	}
-
-	// Invalid PID should not be running
-	invalidPID := 99999999
-	if isProcessRunning(invalidPID) {
-		t.Errorf("invalid PID %d should not be running", invalidPID)
 	}
 }
 
@@ -230,3 +163,4 @@ func TestTimeoutDuration(t *testing.T) {
 		t.Errorf("timeout seems too long: %v", timeout)
 	}
 }
+

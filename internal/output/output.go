@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"dipievil/mcpbridgego/internal/bridge"
+
 	"gopkg.in/yaml.v3"
 )
 
@@ -184,11 +185,28 @@ func PrintOutputUsage() {
 `, ColorBold, ColorReset, ColorBold, ColorReset, ColorBold, ColorReset)
 }
 
+// PrintMainHelp prints the main help message
+func PrintMainHelp() {
+	fmt.Println("MCPBridge - Model Context Protocol Bridge")
+	fmt.Println()
+	fmt.Println("Usage:")
+	fmt.Println("  mcpbridgego [options] [config_file]")
+	fmt.Println()
+	fmt.Println("Common options:")
+	fmt.Println("  -start                   Start MCPBridge in background")
+	fmt.Println("  -stop                    Stop the running MCPBridge")
+	fmt.Println("  -h, --help               Show this help message")
+	fmt.Println()
+	fmt.Println("Output yml template:")
+	fmt.Println("  -o, --output <agent>     Agent type: claude, copilot, generic (default: generic)")
+	fmt.Println("  -f, --file [filename]    Output template to file (default: mcp.json)")
+	fmt.Println()
+	PrintOutputUsage()
+}
+
 // getLocalIPForServer returns the local IP address to use for MCP servers
 // Tries to find a non-loopback IPv4 address
 func getLocalIPForServer() string {
-	// Default to localhost if we can't find a better IP
-	// This will be used when binding to 0.0.0.0
 	defaultIP := "localhost"
 
 	addrs, err := net.InterfaceAddrs()
@@ -220,10 +238,8 @@ func GenerateDynamicMCPConfig(configFile string) (map[string]interface{}, error)
 		return nil, fmt.Errorf("error parsing config file: %v", err)
 	}
 
-	// Get the local IP for the server
 	localIP := getLocalIPForServer()
 
-	// Build servers map from MCPs
 	servers := make(map[string]interface{})
 	for _, mcp := range config.MCPS {
 		url := fmt.Sprintf("http://%s:%d", localIP, mcp.Port)

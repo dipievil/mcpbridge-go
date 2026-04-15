@@ -5,112 +5,31 @@ import (
 	"flag"
 	"fmt"
 	"log"
-	"net"
 	"net/http"
 	"os"
 	"os/exec"
 	"os/signal"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"syscall"
 
 	"dipievil/mcpbridgego/internal/bridge"
+	"dipievil/mcpbridgego/internal/config"
 	"dipievil/mcpbridgego/internal/output"
-
-	"gopkg.in/yaml.v3"
+	"dipievil/mcpbridgego/internal/pidmanager"
 )
 
-// getPIDFile returns the path to the PID file.
-func getPIDFile() string {
-	pidFile := "/var/run/mcpbridgego.pid"
-	if err := os.WriteFile(pidFile, []byte("test"), 0644); err == nil {
-		os.Remove(pidFile)
-		return pidFile
-	}
-	return filepath.Join(os.TempDir(), "mcpbridgego.pid")
-}
-
-// getLockFile returns the path to the lock file.
-func getLockFile() string {
-	return getPIDFile() + ".lock"
-}
-
-// acquireLock tries to acquire an exclusive lock for starting daemon.
-func acquireLock() (*os.File, error) {
-	lockFile := getLockFile()
-	// O_CREATE|O_EXCL ensures only one process can create this file
-	f, err := os.OpenFile(lockFile, os.O_CREATE|os.O_WRONLY|os.O_EXCL, 0644)
-	if err != nil {
-		// Lock file already exists, another process is trying to start
-		return nil, fmt.Errorf("MCPBridge startup is already in progress or another instance is running")
-	}
-	return f, nil
-}
-
-// releaseLock removes the lock file.
-func releaseLock() error {
-	lockFile := getLockFile()
-	return os.Remove(lockFile)
-}
-
-// isProcessRunning checks if a process with the given PID is still running..
-func isProcessRunning(pid int) bool {
-	// First try the standard Unix signal method
-	process, err := os.FindProcess(pid)
-	if err != nil {
-		return false
-	}
-	defer process.Release()
-
-	err = process.Signal(syscall.Signal(0))
-	if err == nil {
-		return true
-	}
-
-	// Fallback: check /proc on Linux
-	if _, err := os.Stat(filepath.Join("/proc", strconv.Itoa(pid))); err == nil {
-		return true
-	}
-
-	return false
-}
-
-// savePID writes the current process ID to a file.
-func savePID() error {
-	pidFile := getPIDFile()
-	pid := os.Getpid()
-	return os.WriteFile(pidFile, []byte(strconv.Itoa(pid)), 0644)
-}
-
-// readPID reads the PID from the PID file.
-func readPID() (int, error) {
-	pidFile := getPIDFile()
-	data, err := os.ReadFile(pidFile)
-	if err != nil {
-		return 0, err
-	}
-	return strconv.Atoi(string(data))
-}
-
-// removePIDFile removes the PID file.
-func removePIDFile() error {
-	pidFile := getPIDFile()
-	return os.Remove(pidFile)
-}
 
 // startDaemon starts the app in background.
-func startDaemon(configFile string) error {
-	pidFile := getPIDFile()
-
+func startDaemon(configFile string, pm *pidmanager.Manager) error {
 	// Try to acquire startup lock to prevent race condition
-	lockFile, err := acquireLock()
+	lockFile, err := pm.AcquireLock()
 	if err != nil {
 		// If lock file exists, either startup is in progress or daemon is running
 		// Either way, we should return an error
 		// Try to read PID to give a better error message
-		if pid, err := readPID(); err == nil {
-			if isProcessRunning(pid) {
+		if pid, err := pm.ReadPID(); err == nil {
+			if pm.IsProcessRunning(pid) {
 				return fmt.Errorf("MCPBridge is already running (PID: %d)", pid)
 			}
 		}
@@ -125,7 +44,7 @@ func startDaemon(configFile string) error {
 	defer func() {
 		if lockFile != nil {
 			lockFile.Close()
-			releaseLock()
+			pm.ReleaseLock()
 		}
 	}()
 
@@ -141,7 +60,7 @@ func startDaemon(configFile string) error {
 
 	// Write PID file immediately
 	pidData := []byte(strconv.Itoa(cmd.Process.Pid))
-	if err := os.WriteFile(pidFile, pidData, 0644); err != nil {
+	if err := os.WriteFile(pm.GetPIDFile(), pidData, 0644); err != nil {
 		log.Printf("Warning: could not write PID file: %v", err)
 	}
 
@@ -154,7 +73,7 @@ func startDaemon(configFile string) error {
 	// The lock file ownership transfers to daemon which will clean it up on exit
 	//if lockFile != nil {
 	//	lockFile.Close()
-	//	releaseLock()
+	//	pm.ReleaseLock()
 	//}
 
 	// Exit the original process, leaving the new one in background
@@ -163,14 +82,14 @@ func startDaemon(configFile string) error {
 }
 
 // stopDaemon stops the running background process.
-func stopDaemon() error {
-	pid, err := readPID()
+func stopDaemon(pm *pidmanager.Manager) error {
+	pid, err := pm.ReadPID()
 	if err != nil {
 		return fmt.Errorf("MCPBridge is not running (no PID file found)")
 	}
 
-	if !isProcessRunning(pid) {
-		removePIDFile()
+	if !pm.IsProcessRunning(pid) {
+		pm.RemovePID()
 		return fmt.Errorf("MCPBridge is not running (PID %d not found)", pid)
 	}
 
@@ -184,63 +103,37 @@ func stopDaemon() error {
 		return fmt.Errorf("failed to stop MCPBridge: %v", err)
 	}
 
-	removePIDFile()
+	pm.RemovePID()
 	fmt.Printf("MCPBridge stopped (PID: %d)\n", pid)
 	return nil
 }
 
 // runForeground runs the app in foreground mode.
-func runForeground(configFile string) error {
+func runForeground(configFile string, pm *pidmanager.Manager) error {
 	// If started via -start, the lock file is already created and held
 	// by the parent -start process, which will exit soon
 	// We just need to ensure it stays locked during daemon runtime and clean up on exit
 
 	// Check if we're the daemon started by -start (lock file exists)
 	// If so, we'll manage the lock on cleanup
-	lockFileExists := false
-	if _, err := os.Stat(getLockFile()); err == nil {
-		lockFileExists = true
-	}
+	lockFileExists := pm.LockFileExists()
 
-	data, err := os.ReadFile(configFile)
+	// Load and validate config
+	cfg, err := config.LoadConfig(configFile)
 	if err != nil {
-		return fmt.Errorf("error reading config file: %v (%s)", err, configFile)
+		return err
 	}
 
-	var tempConfig bridge.Config
-	yaml.Unmarshal(data, &tempConfig)
-	for _, mcp := range tempConfig.MCPS {
-		// Only check env_file if it's specified
-		if mcp.EnvFile != "" {
-			if _, err := os.Stat(mcp.EnvFile); os.IsNotExist(err) {
-				return fmt.Errorf("env file %s for MCP %s does not exist. Check yaml file", mcp.EnvFile, mcp.Name)
-			}
-		}
+	if err := config.Validate(cfg); err != nil {
+		return err
 	}
 
-	for _, mcp := range tempConfig.MCPS {
-		ln, err := net.Listen("tcp", fmt.Sprintf(":%d", mcp.Port))
-		if err != nil {
-			return fmt.Errorf("port %d for MCP %s is not available. Check if another process is using it", mcp.Port, mcp.Name)
-		}
-		ln.Close()
-	}
-
-	for _, mcp := range tempConfig.MCPS {
-		if _, err := exec.LookPath(mcp.Command); err != nil {
-			return fmt.Errorf("command %s for MCP %s not found in PATH. Check yaml file", mcp.Command, mcp.Name)
-		}
-	}
-
-	var config bridge.Config
-	yaml.Unmarshal(data, &config)
-
-	if err := savePID(); err != nil {
+	if err := pm.SavePID(); err != nil {
 		log.Printf("Warning: could not write PID file: %v", err)
 	}
 
 	var bridges []*bridge.Bridge
-	for _, mcp := range config.MCPS {
+	for _, mcp := range cfg.MCPS {
 		b, err := bridge.NewBridge(mcp)
 		if err != nil {
 			return fmt.Errorf("failed to create bridge for %s: %v", mcp.Name, err)
@@ -280,11 +173,11 @@ func runForeground(configFile string) error {
 	for _, b := range bridges {
 		b.Close()
 	}
-	removePIDFile()
+	pm.RemovePID()
 
 	// Clean up lock file if it was created by -start
 	if lockFileExists {
-		releaseLock()
+		pm.ReleaseLock()
 	}
 	return nil
 }
@@ -328,21 +221,7 @@ func main() {
 	os.Args = append([]string{os.Args[0]}, newArgs...)
 
 	if help {
-		fmt.Println("MCPBridge - Model Context Protocol Bridge")
-		fmt.Println()
-		fmt.Println("Usage:")
-		fmt.Println("  mcpbridgego [options] [config_file]")
-		fmt.Println()
-		fmt.Println("Common options:")
-		fmt.Println("  -start                   Start MCPBridge in background")
-		fmt.Println("  -stop                    Stop the running MCPBridge")
-		fmt.Println("  -h, --help               Show this help message")
-		fmt.Println()
-		fmt.Println("Output yml template:")
-		fmt.Println("  -o, --output <agent>     Agent type: claude, copilot, generic (default: generic)")
-		fmt.Println("  -f, --file [filename]    Output template to file (default: mcp.json)")
-		fmt.Println()
-		output.PrintOutputUsage()
+		output.PrintMainHelp()
 		return
 	}
 
@@ -369,6 +248,8 @@ func main() {
 		log.Fatal("Cannot use --start and --stop together")
 	}
 
+	pm := pidmanager.New()
+
 	if start {
 		flag.Parse()
 		args := flag.Args()
@@ -376,14 +257,14 @@ func main() {
 		if len(args) > 0 {
 			configFile = args[0]
 		}
-		if err := startDaemon(configFile); err != nil {
+		if err := startDaemon(configFile, pm); err != nil {
 			log.Fatal(err)
 		}
 		return
 	}
 
 	if stop {
-		if err := stopDaemon(); err != nil {
+		if err := stopDaemon(pm); err != nil {
 			log.Fatal(err)
 		}
 		return
@@ -396,7 +277,8 @@ func main() {
 		configFile = args[0]
 	}
 
-	if err := runForeground(configFile); err != nil {
+	if err := runForeground(configFile, pm); err != nil {
 		log.Fatal(err)
 	}
 }
+
