@@ -13,6 +13,7 @@ const (
 	ColorReset  = "\033[0m"
 	ColorBold   = "\033[1m"
 	ColorYellow = "\033[33m"
+	ColorBlue   = "\033[34m"
 )
 
 // OutputConfig defines output options
@@ -184,11 +185,11 @@ func PrintOutputUsage() {
 func PrintStartupInfo() {
 	fmt.Println()
 	fmt.Printf("%s════════════════════════════════════════════════════════════════%s\n", ColorBold, ColorReset)
-	fmt.Printf("%s  MCPBridge is running in background mode%s\n", ColorGreen, ColorReset)
+	fmt.Printf("%s  MCP Bridge Server is running in %s background mode%s\n", ColorBlue, ColorYellow, ColorReset)
 	fmt.Printf("%s════════════════════════════════════════════════════════════════%s\n", ColorBold, ColorReset)
 	fmt.Println()
 
-	fmt.Printf("%sMCP Configuration for your agent:%s\n", ColorBold, ColorReset)
+	fmt.Printf("%sMCP Configuration for your agents:%s\n", ColorBold, ColorReset)
 	fmt.Println()
 
 	outputCfg := OutputConfig{
@@ -198,31 +199,4 @@ func PrintStartupInfo() {
 	if err := OutputMCPConfig(outputCfg); err != nil {
 		fmt.Printf("%sWarning: Could not display configuration: %v%s\n", ColorYellow, err, ColorReset)
 	}
-
-	fmt.Println()
-	fmt.Printf("%s💡 Quick Reference:%s\n", ColorBold, ColorReset)
-	fmt.Println()
-
-	fmt.Printf("%s# Export configuration for your specific agent:%s\n", ColorGreen, ColorReset)
-	fmt.Println("  mcpbridgego -o claude          # Claude Agent")
-	fmt.Println("  mcpbridgego -o copilot         # GitHub Copilot")
-	fmt.Println("  mcpbridgego -o generic         # Generic MCP (same as above)")
-	fmt.Println()
-
-	fmt.Printf("%s# Save configuration to file:%s\n", ColorGreen, ColorReset)
-	fmt.Println("  mcpbridgego -o claude -f ./claude-mcp.json")
-	fmt.Println("  mcpbridgego -o copilot -f ./copilot-mcp.json")
-	fmt.Println("  mcpbridgego -f ./my-config.json             # (generic default)")
-	fmt.Println()
-
-	fmt.Printf("%s# Stop the background process:%s\n", ColorGreen, ColorReset)
-	fmt.Println("  mcpbridgego --stop")
-	fmt.Println()
-
-	fmt.Printf("%s# View help:%s\n", ColorGreen, ColorReset)
-	fmt.Println("  mcpbridgego -h")
-	fmt.Println()
-
-	fmt.Printf("%s════════════════════════════════════════════════════════════════%s\n", ColorBold, ColorReset)
-	fmt.Println()
 }

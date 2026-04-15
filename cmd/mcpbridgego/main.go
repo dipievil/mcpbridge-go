@@ -130,7 +130,7 @@ func stopDaemon() error {
 func runForeground(configFile string) error {
 	data, err := os.ReadFile(configFile)
 	if err != nil {
-		return fmt.Errorf("error reading config file: %v", err)
+		return fmt.Errorf("error reading config file: %v (%s)", err, configFile)
 	}
 
 	var tempConfig bridge.Config
