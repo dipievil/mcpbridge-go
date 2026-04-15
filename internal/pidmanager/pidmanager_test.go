@@ -3,6 +3,7 @@ package pidmanager
 import (
 	"os"
 	"path/filepath"
+	"strconv"
 	"testing"
 )
 
@@ -115,7 +116,6 @@ func TestAcquireAndReleaseLock(t *testing.T) {
 	}
 }
 
-
 func TestReadPIDError(t *testing.T) {
 	pm := New()
 	pidFile := pm.GetPIDFile()
@@ -149,5 +149,76 @@ func TestLockFileExists(t *testing.T) {
 	// Lock file should exist
 	if !pm.LockFileExists() {
 		t.Error("lock file should exist after acquiring lock")
+	}
+}
+
+func TestCleanupOrphanedLock(t *testing.T) {
+	pm := New()
+	defer os.Remove(pm.lockFile)
+	defer os.Remove(pm.pidFile)
+
+	// Case 1: No lock file at all - should return nil
+	err := pm.CleanupOrphanedLock()
+	if err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+
+	// Case 2: Lock file exists but no PID file (orphaned) - should cleanup
+	lockFile, err := pm.AcquireLock()
+	if err != nil {
+		t.Fatalf("failed to create lock: %v", err)
+	}
+	lockFile.Close()
+
+	if !pm.LockFileExists() {
+		t.Fatal("lock file should exist")
+	}
+
+	err = pm.CleanupOrphanedLock()
+	if err != nil {
+		t.Errorf("unexpected error during cleanup: %v", err)
+	}
+
+	if pm.LockFileExists() {
+		t.Error("lock file should be cleaned up")
+	}
+
+	// Case 3: Lock file and PID of non-existent process - should cleanup
+	lockFile, err = pm.AcquireLock()
+	if err != nil {
+		t.Fatalf("failed to create lock: %v", err)
+	}
+	lockFile.Close()
+
+	invalidPID := 99999999
+	os.WriteFile(pm.pidFile, []byte(strconv.Itoa(invalidPID)), 0644)
+
+	err = pm.CleanupOrphanedLock()
+	if err != nil {
+		t.Errorf("unexpected error during cleanup: %v", err)
+	}
+
+	if pm.LockFileExists() {
+		t.Error("lock file should be cleaned up for invalid PID")
+	}
+
+	// Case 4: Lock file and valid running process - should NOT cleanup
+	lockFile, err = pm.AcquireLock()
+	if err != nil {
+		t.Fatalf("failed to create lock: %v", err)
+	}
+	defer lockFile.Close()
+	defer pm.ReleaseLock()
+
+	currentPID := os.Getpid()
+	os.WriteFile(pm.pidFile, []byte(strconv.Itoa(currentPID)), 0644)
+
+	err = pm.CleanupOrphanedLock()
+	if err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+
+	if !pm.LockFileExists() {
+		t.Error("lock file should NOT be cleaned up for running process")
 	}
 }

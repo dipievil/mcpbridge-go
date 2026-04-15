@@ -100,3 +100,26 @@ func (m *Manager) GetPIDFile() string {
 	return m.pidFile
 }
 
+// CleanupOrphanedLock removes lock file if the process in PID file is not running
+func (m *Manager) CleanupOrphanedLock() error {
+	// Only cleanup if lock file exists
+	if !m.LockFileExists() {
+		return nil
+	}
+
+	// Try to read the PID
+	pid, err := m.ReadPID()
+	if err != nil {
+		// PID file doesn't exist or can't be read - lock is orphaned
+		return m.ReleaseLock()
+	}
+
+	// Check if process is still running
+	if !m.IsProcessRunning(pid) {
+		// Process is not running - lock is orphaned
+		return m.ReleaseLock()
+	}
+
+	// Process is still running - don't cleanup
+	return nil
+}

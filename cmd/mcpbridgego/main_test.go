@@ -163,4 +163,3 @@ func TestTimeoutDuration(t *testing.T) {
 		t.Errorf("timeout seems too long: %v", timeout)
 	}
 }
-

@@ -19,34 +19,32 @@ import (
 	"dipievil/mcpbridgego/internal/pidmanager"
 )
 
-
 // startDaemon starts the app in background.
 func startDaemon(configFile string, pm *pidmanager.Manager) error {
+	// Clean up any orphaned lock file from a previous failed startup
+	pm.CleanupOrphanedLock()
+
 	// Try to acquire startup lock to prevent race condition
 	lockFile, err := pm.AcquireLock()
 	if err != nil {
 		// If lock file exists, either startup is in progress or daemon is running
-		// Either way, we should return an error
 		// Try to read PID to give a better error message
 		if pid, err := pm.ReadPID(); err == nil {
 			if pm.IsProcessRunning(pid) {
 				return fmt.Errorf("MCPBridge is already running (PID: %d)", pid)
 			}
 		}
-		// Lock exists but can't determine if process is running
-		return err
+		// Lock file exists but process is not running - retry after cleanup
+		pm.CleanupOrphanedLock()
+		lockFile, err = pm.AcquireLock()
+		if err != nil {
+			return fmt.Errorf("MCPBridge startup is already in progress or another instance is running")
+		}
 	}
-	defer func() {
-		if lockFile != nil {
-			lockFile.Close()
-		}
-	}()
-	defer func() {
-		if lockFile != nil {
-			lockFile.Close()
-			pm.ReleaseLock()
-		}
-	}()
+
+	if lockFile != nil {
+		defer lockFile.Close()
+	}
 
 	// Create new process to run in background
 	cmd := exec.Command(os.Args[0], configFile)
@@ -55,6 +53,7 @@ func startDaemon(configFile string, pm *pidmanager.Manager) error {
 	cmd.Stdin = nil
 
 	if err := cmd.Start(); err != nil {
+		pm.ReleaseLock()
 		return fmt.Errorf("failed to start MCPBridge: %v", err)
 	}
 
@@ -69,12 +68,9 @@ func startDaemon(configFile string, pm *pidmanager.Manager) error {
 	// Display startup info before exiting
 	output.DisplayAgentCfgInfo(configFile)
 
-	// Do NOT explicitly release lock - daemon will manage it
-	// The lock file ownership transfers to daemon which will clean it up on exit
-	//if lockFile != nil {
-	//	lockFile.Close()
-	//	pm.ReleaseLock()
-	//}
+	// Lock file is left open and will be cleaned up by the daemon on shutdown
+	// Daemon is now responsible for: managing the lock, running MCPs, and cleanup
+	lockFile.Close()
 
 	// Exit the original process, leaving the new one in background
 	os.Exit(0)
@@ -90,6 +86,8 @@ func stopDaemon(pm *pidmanager.Manager) error {
 
 	if !pm.IsProcessRunning(pid) {
 		pm.RemovePID()
+		// Clean up any orphaned lock file
+		pm.ReleaseLock()
 		return fmt.Errorf("MCPBridge is not running (PID %d not found)", pid)
 	}
 
@@ -104,20 +102,14 @@ func stopDaemon(pm *pidmanager.Manager) error {
 	}
 
 	pm.RemovePID()
+	// Clean up lock file
+	pm.ReleaseLock()
 	fmt.Printf("MCPBridge stopped (PID: %d)\n", pid)
 	return nil
 }
 
 // runForeground runs the app in foreground mode.
 func runForeground(configFile string, pm *pidmanager.Manager) error {
-	// If started via -start, the lock file is already created and held
-	// by the parent -start process, which will exit soon
-	// We just need to ensure it stays locked during daemon runtime and clean up on exit
-
-	// Check if we're the daemon started by -start (lock file exists)
-	// If so, we'll manage the lock on cleanup
-	lockFileExists := pm.LockFileExists()
-
 	// Load and validate config
 	cfg, err := config.LoadConfig(configFile)
 	if err != nil {
@@ -174,11 +166,8 @@ func runForeground(configFile string, pm *pidmanager.Manager) error {
 		b.Close()
 	}
 	pm.RemovePID()
-
-	// Clean up lock file if it was created by -start
-	if lockFileExists {
-		pm.ReleaseLock()
-	}
+	// Always clean up lock file when daemon exits
+	pm.ReleaseLock()
 	return nil
 }
 
@@ -281,4 +270,3 @@ func main() {
 		log.Fatal(err)
 	}
 }
-
