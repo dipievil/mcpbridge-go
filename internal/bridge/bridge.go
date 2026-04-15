@@ -25,7 +25,7 @@ type MCPConfig struct {
 	Args    []string          `yaml:"args"`
 	EnvFile string            `yaml:"env_file,omitempty"`
 	EnvVars map[string]string `yaml:"env_vars,omitempty"`
-	Dir     string            `yaml:"dir, omitempty"`
+	Dir     string            `yaml:"dir,omitempty"`
 }
 
 // Config represents the overall configuration with multiple MCPs.

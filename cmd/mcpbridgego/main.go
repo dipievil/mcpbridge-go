@@ -31,8 +31,32 @@ func getPIDFile() string {
 	return filepath.Join(os.TempDir(), "mcpbridgego.pid")
 }
 
+// getLockFile returns the path to the lock file.
+func getLockFile() string {
+	return getPIDFile() + ".lock"
+}
+
+// acquireLock tries to acquire an exclusive lock for starting daemon.
+func acquireLock() (*os.File, error) {
+	lockFile := getLockFile()
+	// O_CREATE|O_EXCL ensures only one process can create this file
+	f, err := os.OpenFile(lockFile, os.O_CREATE|os.O_WRONLY|os.O_EXCL, 0644)
+	if err != nil {
+		// Lock file already exists, another process is trying to start
+		return nil, fmt.Errorf("MCPBridge startup is already in progress or another instance is running")
+	}
+	return f, nil
+}
+
+// releaseLock removes the lock file.
+func releaseLock() error {
+	lockFile := getLockFile()
+	return os.Remove(lockFile)
+}
+
 // isProcessRunning checks if a process with the given PID is still running..
 func isProcessRunning(pid int) bool {
+	// First try the standard Unix signal method
 	process, err := os.FindProcess(pid)
 	if err != nil {
 		return false
@@ -40,7 +64,16 @@ func isProcessRunning(pid int) bool {
 	defer process.Release()
 
 	err = process.Signal(syscall.Signal(0))
-	return err == nil
+	if err == nil {
+		return true
+	}
+
+	// Fallback: check /proc on Linux
+	if _, err := os.Stat(filepath.Join("/proc", strconv.Itoa(pid))); err == nil {
+		return true
+	}
+
+	return false
 }
 
 // savePID writes the current process ID to a file.
@@ -70,13 +103,33 @@ func removePIDFile() error {
 func startDaemon(configFile string) error {
 	pidFile := getPIDFile()
 
-	if pid, err := readPID(); err == nil {
-		if isProcessRunning(pid) {
-			return fmt.Errorf("MCPBridge is already running (PID: %d)", pid)
+	// Try to acquire startup lock to prevent race condition
+	lockFile, err := acquireLock()
+	if err != nil {
+		// If lock file exists, either startup is in progress or daemon is running
+		// Either way, we should return an error
+		// Try to read PID to give a better error message
+		if pid, err := readPID(); err == nil {
+			if isProcessRunning(pid) {
+				return fmt.Errorf("MCPBridge is already running (PID: %d)", pid)
+			}
 		}
-		removePIDFile()
+		// Lock exists but can't determine if process is running
+		return err
 	}
+	defer func() {
+		if lockFile != nil {
+			lockFile.Close()
+		}
+	}()
+	defer func() {
+		if lockFile != nil {
+			lockFile.Close()
+			releaseLock()
+		}
+	}()
 
+	// Create new process to run in background
 	cmd := exec.Command(os.Args[0], configFile)
 	cmd.Stdout = nil
 	cmd.Stderr = nil
@@ -86,6 +139,7 @@ func startDaemon(configFile string) error {
 		return fmt.Errorf("failed to start MCPBridge: %v", err)
 	}
 
+	// Write PID file immediately
 	pidData := []byte(strconv.Itoa(cmd.Process.Pid))
 	if err := os.WriteFile(pidFile, pidData, 0644); err != nil {
 		log.Printf("Warning: could not write PID file: %v", err)
@@ -93,8 +147,17 @@ func startDaemon(configFile string) error {
 
 	fmt.Printf("MCPBridge started in background (PID: %d)\n", cmd.Process.Pid)
 
-	output.PrintStartupInfo()
+	// Display startup info before exiting
+	output.DisplayAgentStartupInfo()
 
+	// Do NOT explicitly release lock - daemon will manage it
+	// The lock file ownership transfers to daemon which will clean it up on exit
+	//if lockFile != nil {
+	//	lockFile.Close()
+	//	releaseLock()
+	//}
+
+	// Exit the original process, leaving the new one in background
 	os.Exit(0)
 	return nil
 }
@@ -128,6 +191,17 @@ func stopDaemon() error {
 
 // runForeground runs the app in foreground mode.
 func runForeground(configFile string) error {
+	// If started via -start, the lock file is already created and held
+	// by the parent -start process, which will exit soon
+	// We just need to ensure it stays locked during daemon runtime and clean up on exit
+	
+	// Check if we're the daemon started by -start (lock file exists)
+	// If so, we'll manage the lock on cleanup
+	lockFileExists := false
+	if _, err := os.Stat(getLockFile()); err == nil {
+		lockFileExists = true
+	}
+
 	data, err := os.ReadFile(configFile)
 	if err != nil {
 		return fmt.Errorf("error reading config file: %v (%s)", err, configFile)
@@ -204,6 +278,11 @@ func runForeground(configFile string) error {
 		b.Close()
 	}
 	removePIDFile()
+	
+	// Clean up lock file if it was created by -start
+	if lockFileExists {
+		releaseLock()
+	}
 	return nil
 }
 
