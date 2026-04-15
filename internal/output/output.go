@@ -100,7 +100,7 @@ func OutputMCPConfig(cfg OutputConfig) error {
 		return fmt.Errorf("unknown agent type: %s. Supported agents: claude, copilot, generic", cfg.Agent)
 	}
 
-	jsonData, err := json.MarshalIndent(template, "", "\t")
+	jsonData, err := json.MarshalIndent(template, "", "  ")
 	if err != nil {
 		return fmt.Errorf("error marshaling JSON: %v", err)
 	}
@@ -114,7 +114,7 @@ func OutputMCPConfig(cfg OutputConfig) error {
 
 // outputToScreen prints JSON to screen with green color
 func outputToScreen(jsonData []byte) {
-	fmt.Printf("%s%s%s%s\n", ColorBold, ColorGreen, string(jsonData), ColorReset)
+	fmt.Printf("%s%s%s\n", ColorGreen, string(jsonData), ColorReset)
 }
 
 // outputToFile writes JSON to file
@@ -180,16 +180,12 @@ func PrintOutputUsage() {
 `, ColorBold, ColorReset, ColorBold, ColorReset, ColorBold, ColorReset)
 }
 
-// PrintStartupInfo displays startup information when MCPBridge starts in background mode
+// DisplayAgentCfgInfo displays startup information when MCPBridge starts in background mode
 // Shows the generic MCP configuration and instructions for configuration export
-func PrintStartupInfo() {
-	fmt.Println()
-	fmt.Printf("%s════════════════════════════════════════════════════════════════%s\n", ColorBold, ColorReset)
-	fmt.Printf("%s  MCP Bridge Server is running in %s background mode%s\n", ColorBlue, ColorYellow, ColorReset)
-	fmt.Printf("%s════════════════════════════════════════════════════════════════%s\n", ColorBold, ColorReset)
-	fmt.Println()
+func DisplayAgentCfgInfo() {
 
-	fmt.Printf("%sMCP Configuration for your agents:%s\n", ColorBold, ColorReset)
+	fmt.Println()
+	fmt.Printf("%sMCP Configuration for your agents:%s\n", ColorBold, ColorBlue)
 	fmt.Println()
 
 	outputCfg := OutputConfig{

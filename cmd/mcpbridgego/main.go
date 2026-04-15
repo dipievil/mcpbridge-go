@@ -148,7 +148,7 @@ func startDaemon(configFile string) error {
 	fmt.Printf("MCPBridge started in background (PID: %d)\n", cmd.Process.Pid)
 
 	// Display startup info before exiting
-	output.DisplayAgentStartupInfo()
+	output.DisplayAgentCfgInfo()
 
 	// Do NOT explicitly release lock - daemon will manage it
 	// The lock file ownership transfers to daemon which will clean it up on exit
@@ -194,7 +194,7 @@ func runForeground(configFile string) error {
 	// If started via -start, the lock file is already created and held
 	// by the parent -start process, which will exit soon
 	// We just need to ensure it stays locked during daemon runtime and clean up on exit
-	
+
 	// Check if we're the daemon started by -start (lock file exists)
 	// If so, we'll manage the lock on cleanup
 	lockFileExists := false
@@ -278,7 +278,7 @@ func runForeground(configFile string) error {
 		b.Close()
 	}
 	removePIDFile()
-	
+
 	// Clean up lock file if it was created by -start
 	if lockFileExists {
 		releaseLock()
