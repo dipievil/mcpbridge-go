@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/json"
 	"flag"
 	"fmt"
 	"log"
@@ -136,20 +135,8 @@ func runForeground(configFile string, pm *pidmanager.Manager) error {
 		mux.HandleFunc("/rpc", b.HandleRPC)
 		mux.HandleFunc("/sse", b.HandleSSE)
 		mux.HandleFunc("/health", b.HandleHealth)
-		mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-			w.Header().Set("Content-Type", "application/json")
-			w.Header().Set("Access-Control-Allow-Origin", "*")
-			json.NewEncoder(w).Encode(map[string]interface{}{
-				"service": "MCPBridge",
-				"mcp":     mcp.Name,
-				"port":    mcp.Port,
-				"endpoints": map[string]string{
-					"rpc":    "/rpc (POST with application/json)",
-					"sse":    "/sse (GET for Server-Sent Events)",
-					"health": "/health (GET)",
-				},
-			})
-		})
+		// Root route defaults to SSE (MCP standard protocol)
+		mux.HandleFunc("/", b.HandleSSE)
 
 		go func(p int, n string) {
 			log.Printf("Starting MCP %s on port %d", n, p)

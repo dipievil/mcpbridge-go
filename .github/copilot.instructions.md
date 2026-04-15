@@ -235,5 +235,6 @@ localIP := getLocalIPForServer()
  - Use comments only to explain "why" certain decisions were made, especially if they are non-obvious or could be misunderstood.
  - Avoid DRY violations by not repeating code patterns that can be abstracted into functions or methods.
  - Always follow the established patterns in the project for consistency, especially around error handling, configuration parsing, and process management.
+ - Always confirm before committing.
 
  
