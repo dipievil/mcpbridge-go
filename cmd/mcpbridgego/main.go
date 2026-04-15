@@ -210,8 +210,11 @@ func runForeground(configFile string) error {
 	var tempConfig bridge.Config
 	yaml.Unmarshal(data, &tempConfig)
 	for _, mcp := range tempConfig.MCPS {
-		if _, err := os.Stat(mcp.EnvFile); os.IsNotExist(err) {
-			return fmt.Errorf("env file %s for MCP %s does not exist. Check yaml file", mcp.EnvFile, mcp.Name)
+		// Only check env_file if it's specified
+		if mcp.EnvFile != "" {
+			if _, err := os.Stat(mcp.EnvFile); os.IsNotExist(err) {
+				return fmt.Errorf("env file %s for MCP %s does not exist. Check yaml file", mcp.EnvFile, mcp.Name)
+			}
 		}
 	}
 
