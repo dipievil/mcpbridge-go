@@ -133,6 +133,8 @@ func (b *Bridge) readMessages() {
 			continue
 		}
 
+		log.Printf("[%s] Received message: %s", b.config.Name, string(line))
+
 		var msg JSONRPCMessage
 		if err := json.Unmarshal(line, &msg); err != nil {
 			log.Printf("[%s] Error parsing message: %v", b.config.Name, err)
@@ -141,12 +143,15 @@ func (b *Bridge) readMessages() {
 
 		b.mu.Lock()
 		if ch, exists := b.responseChan[msg.ID]; exists && msg.ID != nil {
+			log.Printf("[%s] Dispatching response for ID %v", b.config.Name, msg.ID)
 			ch <- &msg
 			delete(b.responseChan, msg.ID)
 		} else {
+			log.Printf("[%s] Message ID %v not found in responseChan, trying to dispatch to first available channel", b.config.Name, msg.ID)
 			for id, respCh := range b.responseChan {
 				select {
 				case respCh <- &msg:
+					log.Printf("[%s] Dispatched to ID %v", b.config.Name, id)
 					delete(b.responseChan, id)
 				default:
 				}
@@ -185,10 +190,18 @@ func (b *Bridge) SendMessage(msg *JSONRPCMessage, timeout time.Duration) (*JSONR
 		return nil, fmt.Errorf("failed to marshal message: %v", err)
 	}
 
+	log.Printf("[%s] Sending message with ID %v: %s", b.config.Name, msg.ID, string(data))
+
 	b.mu.Lock()
 	_, err = b.stdin.Write(append(data, '\n'))
 	b.mu.Unlock()
 	if err != nil {
+		// Clean up the response channel on error
+		if msg.ID != nil {
+			b.mu.Lock()
+			delete(b.responseChan, msg.ID)
+			b.mu.Unlock()
+		}
 		return nil, fmt.Errorf("failed to write to stdin: %v", err)
 	}
 

@@ -74,9 +74,18 @@ func validateMCP(mcp bridge.MCPConfig) error {
 	}
 	ln.Close()
 
-	// Check if command exists in PATH
-	if _, err := exec.LookPath(mcp.Command); err != nil {
-		return fmt.Errorf("command %s for MCP %s not found in PATH. Check yaml file", mcp.Command, mcp.Name)
+	// Check if command exists in PATH or is an absolute path
+	// LookPath only works for commands in PATH, not absolute paths
+	if mcp.Command[0] == '/' {
+		// Absolute path - check if file exists
+		if _, err := os.Stat(mcp.Command); os.IsNotExist(err) {
+			return fmt.Errorf("command %s for MCP %s does not exist. Check yaml file", mcp.Command, mcp.Name)
+		}
+	} else {
+		// Relative command - check if it exists in PATH
+		if _, err := exec.LookPath(mcp.Command); err != nil {
+			return fmt.Errorf("command %s for MCP %s not found in PATH. Check yaml file", mcp.Command, mcp.Name)
+		}
 	}
 
 	return nil
