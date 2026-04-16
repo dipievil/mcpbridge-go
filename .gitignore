@@ -44,3 +44,4 @@ go.work
 *.tmp
 Thumbs.db
 config.yaml
+.github/copilot.instructions.md
