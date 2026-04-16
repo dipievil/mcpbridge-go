@@ -52,18 +52,14 @@ steps:
       - apk add --no-cache make
       - make build
 
-  - name: release
-    image: node:lts
-    environment:
-      GITHUB_TOKEN:
-        from_secret: GITHUB_PAT
-      GITHUB_EMAIL:
-        from_secret: GITHUB_EMAIL
-      GITHUB_NAME:
-        from_secret: GITHUB_NAME
-    commands:
-      - export PATH="$HOME/.bun/bin:$PATH"
-      - git config --global user.email "$GITHUB_EMAIL"
-      - git config --global user.name "$GITHUB_NAME"      
-      - node install
-      - npx semantic-release
+  - name: publish-release
+    image: plugins/github-release
+    settings:
+      api_key:
+        from_secret: github_token
+      files:
+        - bin/*
+      checksum: sha256
+    when:
+      ref:
+        - refs/tags/v*
