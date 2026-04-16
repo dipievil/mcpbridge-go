@@ -36,7 +36,7 @@ func TestPIDFileHandling(t *testing.T) {
 	}
 
 	// Cleanup
-	if err := pm.RemovePID(); err != nil {
+	if err := pm.removePID(); err != nil {
 		t.Fatalf("failed to remove PID file: %v", err)
 	}
 

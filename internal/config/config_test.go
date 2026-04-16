@@ -29,7 +29,7 @@ mcps:
 	}
 
 	// Load config
-	cfg, err := LoadConfig(configFile)
+	cfg, err := LoadConfig()
 	if err != nil {
 		t.Fatalf("failed to load config: %v", err)
 	}
@@ -45,14 +45,6 @@ mcps:
 
 	if cfg.MCPS[0].Port != 3000 {
 		t.Errorf("expected first MCP port to be 3000, got %d", cfg.MCPS[0].Port)
-	}
-}
-
-func TestLoadConfigNotFound(t *testing.T) {
-	// Try to load non-existent config file
-	_, err := LoadConfig("/non/existent/config.yaml")
-	if err == nil {
-		t.Error("should fail to load non-existent config file")
 	}
 }
 
@@ -74,7 +66,7 @@ mcps:
 	}
 
 	// Load and validate config
-	cfg, err := LoadConfig(configFile)
+	cfg, err := LoadConfig()
 	if err != nil {
 		t.Fatalf("failed to load config: %v", err)
 	}
@@ -98,7 +90,7 @@ mcps: []
 	}
 
 	// Load and validate config
-	cfg, err := LoadConfig(configFile)
+	cfg, err := LoadConfig()
 	if err != nil {
 		t.Fatalf("failed to load config: %v", err)
 	}
@@ -126,7 +118,7 @@ mcps:
 	}
 
 	// Load and validate config
-	cfg, err := LoadConfig(configFile)
+	cfg, err := LoadConfig()
 	if err != nil {
 		t.Fatalf("failed to load config: %v", err)
 	}
@@ -154,7 +146,7 @@ mcps:
 	}
 
 	// Load and validate config
-	cfg, err := LoadConfig(configFile)
+	cfg, err := LoadConfig()
 	if err != nil {
 		t.Fatalf("failed to load config: %v", err)
 	}
@@ -183,7 +175,7 @@ mcps:
 	}
 
 	// Load and validate config
-	cfg, err := LoadConfig(configFile)
+	cfg, err := LoadConfig()
 	if err != nil {
 		t.Fatalf("failed to load config: %v", err)
 	}

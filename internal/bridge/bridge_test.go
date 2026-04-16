@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"dipievil/mcpbridgego/internal/config"
 )
 
 // TestJSONRPCMessage tests the JSONRPCMessage structure
@@ -45,7 +47,7 @@ func TestJSONRPCError(t *testing.T) {
 
 // TestMCPConfig tests the MCPConfig structure
 func TestMCPConfig(t *testing.T) {
-	cfg := MCPConfig{
+	cfg := config.MCPConfig{
 		Name:    "test-mcp",
 		Port:    3000,
 		Command: "echo",
@@ -66,8 +68,8 @@ func TestMCPConfig(t *testing.T) {
 
 // TestConfig tests the Config structure
 func TestConfig(t *testing.T) {
-	cfg := Config{
-		MCPS: []MCPConfig{
+	cfg := config.Config{
+		MCPS: []config.MCPConfig{
 			{
 				Name:    "mcp-1",
 				Port:    3000,
@@ -94,7 +96,7 @@ func TestConfig(t *testing.T) {
 
 // TestHandleRPC_MethodNotAllowed tests HandleRPC with unsupported method
 func TestHandleRPC_MethodNotAllowed(t *testing.T) {
-	cfg := MCPConfig{
+	cfg := config.MCPConfig{
 		Name:    "test-mcp",
 		Port:    3000,
 		Command: "echo",
@@ -118,7 +120,7 @@ func TestHandleRPC_MethodNotAllowed(t *testing.T) {
 
 // TestHandleRPC_CORSHeaders tests that HandleRPC sets CORS headers
 func TestHandleRPC_CORSHeaders(t *testing.T) {
-	cfg := MCPConfig{
+	cfg := config.MCPConfig{
 		Name:    "test-mcp",
 		Port:    3000,
 		Command: "echo",
@@ -148,7 +150,7 @@ func TestHandleRPC_CORSHeaders(t *testing.T) {
 
 // TestHandleRPC_InvalidJSON tests HandleRPC with invalid JSON
 func TestHandleRPC_InvalidJSON(t *testing.T) {
-	cfg := MCPConfig{
+	cfg := config.MCPConfig{
 		Name:    "test-mcp",
 		Port:    3000,
 		Command: "echo",
@@ -189,7 +191,7 @@ func TestHandleRPC_InvalidJSON(t *testing.T) {
 
 // TestHandleHealth tests the HandleHealth handler
 func TestHandleHealth(t *testing.T) {
-	cfg := MCPConfig{
+	cfg := config.MCPConfig{
 		Name:    "test-mcp",
 		Port:    3000,
 		Command: "echo",
@@ -229,7 +231,7 @@ func TestHandleHealth(t *testing.T) {
 
 // TestBridgeInitialized tests that bridge is properly initialized
 func TestBridgeInitialized(t *testing.T) {
-	cfg := MCPConfig{
+	cfg := config.MCPConfig{
 		Name:    "test-mcp",
 		Port:    3000,
 		Command: "echo",
@@ -259,7 +261,7 @@ func TestBridgeInitialized(t *testing.T) {
 
 // TestClose tests the Close method
 func TestClose(t *testing.T) {
-	cfg := MCPConfig{
+	cfg := config.MCPConfig{
 		Name:    "test-mcp",
 		Port:    3000,
 		Command: "echo",

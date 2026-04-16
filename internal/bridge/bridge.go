@@ -14,24 +14,10 @@ import (
 	"sync"
 	"time"
 
+	"dipievil/mcpbridgego/internal/config"
+
 	"github.com/joho/godotenv"
 )
-
-// MCPConfig represents a single MCP (Model Context Protocol) configuration.
-type MCPConfig struct {
-	Name    string            `yaml:"name"`
-	Port    int               `yaml:"port"`
-	Command string            `yaml:"command"`
-	Args    []string          `yaml:"args"`
-	EnvFile string            `yaml:"env_file,omitempty"`
-	EnvVars map[string]string `yaml:"env_vars,omitempty"`
-	Dir     string            `yaml:"dir,omitempty"`
-}
-
-// Config represents the overall configuration with multiple MCPs.
-type Config struct {
-	MCPS []MCPConfig `yaml:"mcps"`
-}
 
 // JSONRPCMessage represents a JSON-RPC 2.0 message.
 type JSONRPCMessage struct {
@@ -52,7 +38,7 @@ type JSONRPCError struct {
 
 // Bridge manages communication with a single MCP process.
 type Bridge struct {
-	config        MCPConfig
+	config        config.MCPConfig
 	mu            sync.Mutex
 	stdin         io.WriteCloser
 	stdout        io.ReadCloser
@@ -64,33 +50,38 @@ type Bridge struct {
 }
 
 // NewBridge creates and initializes a new Bridge for a given MCP configuration.
-func NewBridge(cfg MCPConfig) (*Bridge, error) {
+func NewBridge(mcpConfig config.MCPConfig) (*Bridge, error) {
 	b := &Bridge{
-		config:       cfg,
+		config:       mcpConfig,
 		responseChan: make(map[interface{}]chan *JSONRPCMessage),
 	}
 
-	log.Printf("Starting MCP %s with command: %s %v", cfg.Name, cfg.Command, cfg.Args)
+	resolvedCommand, err := config.ResolveCommand(mcpConfig.Command)
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve command for MCP %s: %v", mcpConfig.Name, err)
+	}
+
+	log.Printf("Starting MCP %s with command: %s %v", mcpConfig.Name, resolvedCommand, mcpConfig.Args)
 
 	envs := make(map[string]string)
 
-	if cfg.EnvFile != "" {
-		existsEnvFile, err := os.Stat(cfg.EnvFile)
+	if mcpConfig.EnvFile != "" {
+		existsEnvFile, err := os.Stat(mcpConfig.EnvFile)
 		if err != nil || existsEnvFile.IsDir() {
-			log.Printf("Warning: env file %s for MCP %s does not exist or is a directory. Skipping env file loading.", cfg.EnvFile, cfg.Name)
+			log.Printf("Warning: env file %s for MCP %s does not exist or is a directory. Skipping env file loading.", mcpConfig.EnvFile, mcpConfig.Name)
 		} else {
-			envs, _ = godotenv.Read(cfg.EnvFile)
-			maps.Copy(envs, cfg.EnvVars)
+			envs, _ = godotenv.Read(mcpConfig.EnvFile)
+			maps.Copy(envs, mcpConfig.EnvVars)
 		}
 	}
 
-	maps.Copy(envs, cfg.EnvVars)
+	maps.Copy(envs, mcpConfig.EnvVars)
 
-	log.Printf("Environment variables for MCP %s: %v", cfg.Name, envs)
+	log.Printf("Environment variables for MCP %s: %v", mcpConfig.Name, envs)
 
-	cmd := exec.Command(cfg.Command, cfg.Args...)
-	if cfg.Dir != "" {
-		cmd.Dir = cfg.Dir
+	cmd := exec.Command(resolvedCommand, mcpConfig.Args...)
+	if mcpConfig.Dir != "" {
+		cmd.Dir = mcpConfig.Dir
 	}
 	cmd.Env = os.Environ()
 	for k, v := range envs {
@@ -102,7 +93,7 @@ func NewBridge(cfg MCPConfig) (*Bridge, error) {
 	stderr, _ := cmd.StderrPipe()
 
 	if err := cmd.Start(); err != nil {
-		return nil, fmt.Errorf("failed to start MCP %s: %v", cfg.Name, err)
+		return nil, fmt.Errorf("failed to start MCP %s: %v", mcpConfig.Name, err)
 	}
 
 	b.cmd = cmd
@@ -113,13 +104,13 @@ func NewBridge(cfg MCPConfig) (*Bridge, error) {
 	go func() {
 		scanner := bufio.NewScanner(stderr)
 		for scanner.Scan() {
-			log.Printf("[%s stderr] %s", cfg.Name, scanner.Text())
+			log.Printf("[%s stderr] %s", mcpConfig.Name, scanner.Text())
 		}
 	}()
 
 	go b.readMessages()
 
-	log.Printf("MCP %s started on pid %d", cfg.Name, cmd.Process.Pid)
+	log.Printf("MCP %s started on pid %d", mcpConfig.Name, cmd.Process.Pid)
 	b.initialized = true
 	return b, nil
 }

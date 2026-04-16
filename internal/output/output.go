@@ -8,9 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"dipievil/mcpbridgego/internal/bridge"
-
-	"gopkg.in/yaml.v3"
+	"dipievil/mcpbridgego/internal/config"
 )
 
 const (
@@ -225,23 +223,20 @@ func getLocalIPForServer() string {
 	return defaultIP
 }
 
-// GenerateDynamicMCPConfig generates MCP configuration from config file
+// generateDynamicMCPConfig generates MCP configuration from config file
 // Returns JSON representation of MCP servers
-func GenerateDynamicMCPConfig(configFile string) (map[string]interface{}, error) {
-	data, err := os.ReadFile(configFile)
-	if err != nil {
-		return nil, fmt.Errorf("error reading config file: %v", err)
-	}
+func generateDynamicMCPConfig() (map[string]interface{}, error) {
 
-	var config bridge.Config
-	if err := yaml.Unmarshal(data, &config); err != nil {
-		return nil, fmt.Errorf("error parsing config file: %v", err)
+	cfg, err := config.LoadConfig()
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to load configuration: %v", err)
 	}
 
 	localIP := getLocalIPForServer()
 
 	servers := make(map[string]interface{})
-	for _, mcp := range config.MCPS {
+	for _, mcp := range cfg.MCPS {
 		url := fmt.Sprintf("http://%s:%d", localIP, mcp.Port)
 		servers[mcp.Name] = map[string]interface{}{
 			"url": url,
@@ -255,13 +250,12 @@ func GenerateDynamicMCPConfig(configFile string) (map[string]interface{}, error)
 
 // DisplayAgentCfgInfo displays startup information when MCPBridge starts in background mode
 // Shows the dynamic MCP configuration based on the config file
-func DisplayAgentCfgInfo(configFile string) {
+func DisplayAgentCfgInfo() {
 	fmt.Println()
 	fmt.Printf("%sMCP Configuration for your agents:%s\n", ColorBold, ColorBlue)
 	fmt.Println()
 
-	// Generate dynamic configuration from config file
-	config, err := GenerateDynamicMCPConfig(configFile)
+	config, err := generateDynamicMCPConfig()
 	if err != nil {
 		fmt.Printf("%sWarning: Could not generate configuration: %v%s\n", ColorYellow, err, ColorReset)
 		return

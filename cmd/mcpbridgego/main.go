@@ -19,21 +19,17 @@ import (
 )
 
 // startDaemon starts the app in background.
-func startDaemon(configFile string, pm *pidmanager.Manager) error {
-	// Clean up any orphaned lock file from a previous failed startup
+func startDaemon(pm *pidmanager.Manager) error {
 	pm.CleanupOrphanedLock()
 
-	// Try to acquire startup lock to prevent race condition
 	lockFile, err := pm.AcquireLock()
 	if err != nil {
-		// If lock file exists, either startup is in progress or daemon is running
-		// Try to read PID to give a better error message
 		if pid, err := pm.ReadPID(); err == nil {
 			if pm.IsProcessRunning(pid) {
 				return fmt.Errorf("MCPBridge is already running (PID: %d)", pid)
 			}
 		}
-		// Lock file exists but process is not running - retry after cleanup
+
 		pm.CleanupOrphanedLock()
 		lockFile, err = pm.AcquireLock()
 		if err != nil {
@@ -45,8 +41,7 @@ func startDaemon(configFile string, pm *pidmanager.Manager) error {
 		defer lockFile.Close()
 	}
 
-	// Create new process to run in background
-	cmd := exec.Command(os.Args[0], configFile)
+	cmd := exec.Command(os.Args[0])
 	cmd.Stdout = nil
 	cmd.Stderr = nil
 	cmd.Stdin = nil
@@ -56,7 +51,6 @@ func startDaemon(configFile string, pm *pidmanager.Manager) error {
 		return fmt.Errorf("failed to start MCPBridge: %v", err)
 	}
 
-	// Write PID file immediately
 	pidData := []byte(strconv.Itoa(cmd.Process.Pid))
 	if err := os.WriteFile(pm.GetPIDFile(), pidData, 0644); err != nil {
 		log.Printf("Warning: could not write PID file: %v", err)
@@ -64,14 +58,10 @@ func startDaemon(configFile string, pm *pidmanager.Manager) error {
 
 	fmt.Printf("MCPBridge started in background (PID: %d)\n", cmd.Process.Pid)
 
-	// Display startup info before exiting
-	output.DisplayAgentCfgInfo(configFile)
+	output.DisplayAgentCfgInfo()
 
-	// Lock file is left open and will be cleaned up by the daemon on shutdown
-	// Daemon is now responsible for: managing the lock, running MCPs, and cleanup
 	lockFile.Close()
 
-	// Exit the original process, leaving the new one in background
 	os.Exit(0)
 	return nil
 }
@@ -84,9 +74,10 @@ func stopDaemon(pm *pidmanager.Manager) error {
 	}
 
 	if !pm.IsProcessRunning(pid) {
-		pm.RemovePID()
-		// Clean up any orphaned lock file
-		pm.ReleaseLock()
+		if err := pm.RemoveProcess(); err != nil {
+			log.Printf("Warning: failed to remove MCPBridge process: %v", err)
+		}
+
 		return fmt.Errorf("MCPBridge is not running (PID %d not found)", pid)
 	}
 
@@ -100,17 +91,18 @@ func stopDaemon(pm *pidmanager.Manager) error {
 		return fmt.Errorf("failed to stop MCPBridge: %v", err)
 	}
 
-	pm.RemovePID()
-	// Clean up lock file
-	pm.ReleaseLock()
+	if err := pm.RemoveProcess(); err != nil {
+		return fmt.Errorf("failed to remove MCPBridge process: %v", err)
+	}
+
 	fmt.Printf("MCPBridge stopped (PID: %d)\n", pid)
 	return nil
 }
 
 // runForeground runs the app in foreground mode.
-func runForeground(configFile string, pm *pidmanager.Manager) error {
+func runForeground(pm *pidmanager.Manager) error {
 	// Load and validate config
-	cfg, err := config.LoadConfig(configFile)
+	cfg, err := config.LoadConfig()
 	if err != nil {
 		return err
 	}
@@ -138,9 +130,9 @@ func runForeground(configFile string, pm *pidmanager.Manager) error {
 		// Root route defaults to SSE (MCP standard protocol)
 		mux.HandleFunc("/", b.HandleSSE)
 
-		go func(p int, n string) {
-			log.Printf("Starting MCP %s on port %d", n, p)
-			http.ListenAndServe(fmt.Sprintf(":%d", p), mux)
+		go func(port int, name string) {
+			log.Printf("Starting MCP %s on port %d", name, port)
+			http.ListenAndServe(fmt.Sprintf(":%d", port), mux)
 		}(mcp.Port, mcp.Name)
 	}
 
@@ -152,9 +144,9 @@ func runForeground(configFile string, pm *pidmanager.Manager) error {
 	for _, b := range bridges {
 		b.Close()
 	}
-	pm.RemovePID()
-	// Always clean up lock file when daemon exits
-	pm.ReleaseLock()
+	if err := pm.RemoveProcess(); err != nil {
+		log.Printf("Warning: failed to remove MCPBridge process: %v", err)
+	}
 	return nil
 }
 
@@ -228,12 +220,7 @@ func main() {
 
 	if start {
 		flag.Parse()
-		args := flag.Args()
-		configFile := "config.yaml"
-		if len(args) > 0 {
-			configFile = args[0]
-		}
-		if err := startDaemon(configFile, pm); err != nil {
+		if err := startDaemon(pm); err != nil {
 			log.Fatal(err)
 		}
 		return
@@ -247,13 +234,8 @@ func main() {
 	}
 
 	flag.Parse()
-	args := flag.Args()
-	configFile := "config.yaml"
-	if len(args) > 0 {
-		configFile = args[0]
-	}
 
-	if err := runForeground(configFile, pm); err != nil {
+	if err := runForeground(pm); err != nil {
 		log.Fatal(err)
 	}
 }

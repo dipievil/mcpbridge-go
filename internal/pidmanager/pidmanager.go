@@ -61,12 +61,19 @@ func (m *Manager) IsProcessRunning(pid int) bool {
 		return true
 	}
 
-	// Fallback: check /proc on Linux
 	if _, err := os.Stat(filepath.Join("/proc", strconv.Itoa(pid))); err == nil {
 		return true
 	}
 
 	return false
+}
+
+func (m *Manager) RemoveProcess() error {
+	err := m.removePID()
+	if err != nil {
+		return err
+	}
+	return m.ReleaseLock()
 }
 
 // SavePID writes the current process ID to the PID file
@@ -84,8 +91,8 @@ func (m *Manager) ReadPID() (int, error) {
 	return strconv.Atoi(string(data))
 }
 
-// RemovePID removes the PID file
-func (m *Manager) RemovePID() error {
+// removePID removes the PID file
+func (m *Manager) removePID() error {
 	return os.Remove(m.pidFile)
 }
 
@@ -95,31 +102,25 @@ func (m *Manager) LockFileExists() bool {
 	return err == nil
 }
 
-// GetPIDFile returns the path to the PID file
+// GetPIDFile Returns the path to the PID file.
 func (m *Manager) GetPIDFile() string {
 	return m.pidFile
 }
 
-// CleanupOrphanedLock removes lock file if the process in PID file is not running
+// CleanupOrphanedLock Removes lock file if the process in PID file is not running.
 func (m *Manager) CleanupOrphanedLock() error {
-	// Only cleanup if lock file exists
 	if !m.LockFileExists() {
 		return nil
 	}
 
-	// Try to read the PID
 	pid, err := m.ReadPID()
 	if err != nil {
-		// PID file doesn't exist or can't be read - lock is orphaned
 		return m.ReleaseLock()
 	}
 
-	// Check if process is still running
 	if !m.IsProcessRunning(pid) {
-		// Process is not running - lock is orphaned
 		return m.ReleaseLock()
 	}
 
-	// Process is still running - don't cleanup
 	return nil
 }

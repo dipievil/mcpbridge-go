@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"dipievil/mcpbridgego/internal/bridge"
+	"dipievil/mcpbridgego/internal/config"
 )
 
 func TestJSONRPCMessageMarshaling(t *testing.T) {
@@ -64,12 +65,12 @@ func TestJSONRPCErrorMarshaling(t *testing.T) {
 func TestMCPConfigValidation(t *testing.T) {
 	tests := []struct {
 		name   string
-		config bridge.MCPConfig
+		config config.MCPConfig
 		valid  bool
 	}{
 		{
 			name: "valid config",
-			config: bridge.MCPConfig{
+			config: config.MCPConfig{
 				Name:    "test",
 				Port:    3000,
 				Command: "echo",
@@ -79,7 +80,7 @@ func TestMCPConfigValidation(t *testing.T) {
 		},
 		{
 			name: "config with env_file",
-			config: bridge.MCPConfig{
+			config: config.MCPConfig{
 				Name:    "test",
 				Port:    3000,
 				Command: "node",
@@ -90,7 +91,7 @@ func TestMCPConfigValidation(t *testing.T) {
 		},
 		{
 			name: "config with env_vars",
-			config: bridge.MCPConfig{
+			config: config.MCPConfig{
 				Name:    "test",
 				Port:    3000,
 				Command: "python",
@@ -101,7 +102,7 @@ func TestMCPConfigValidation(t *testing.T) {
 		},
 		{
 			name: "config with dir",
-			config: bridge.MCPConfig{
+			config: config.MCPConfig{
 				Name:    "test",
 				Port:    3000,
 				Command: "bash",
