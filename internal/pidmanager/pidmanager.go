@@ -8,13 +8,13 @@ import (
 	"syscall"
 )
 
-// Manager handles PID file and lock file operations
+// Manager handles PID file and lock file operations.
 type Manager struct {
 	pidFile  string
 	lockFile string
 }
 
-// New creates a new PID manager
+// New creates a new PID manager.
 func New() *Manager {
 	pidFile := getPIDFilePath()
 	return &Manager{
@@ -23,7 +23,7 @@ func New() *Manager {
 	}
 }
 
-// getPIDFilePath returns the path to the PID file
+// getPIDFilePath returns the path to the PID file.
 func getPIDFilePath() string {
 	pidFile := "/var/run/mcpbridgego.pid"
 	if err := os.WriteFile(pidFile, []byte("test"), 0644); err == nil {
@@ -33,23 +33,31 @@ func getPIDFilePath() string {
 	return filepath.Join(os.TempDir(), "mcpbridgego.pid")
 }
 
-// AcquireLock tries to acquire an exclusive lock for daemon startup
+// AcquireLock tries to acquire an exclusive advisory flock on the lock file.
+// The returned file handle MUST be kept open as long as the lock should be held.
+// The OS automatically releases the flock when the file is closed or the process exits,
+// even on crashes via os.Exit or signals.
 func (m *Manager) AcquireLock() (*os.File, error) {
-	f, err := os.OpenFile(m.lockFile, os.O_CREATE|os.O_WRONLY|os.O_EXCL, 0644)
+	f, err := os.OpenFile(m.lockFile, os.O_CREATE|os.O_RDWR, 0644)
 	if err != nil {
+		return nil, fmt.Errorf("failed to open lock file: %v", err)
+	}
+
+	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
+		f.Close()
 		return nil, fmt.Errorf("MCPBridge startup is already in progress or another instance is running")
 	}
+
 	return f, nil
 }
 
-// ReleaseLock removes the lock file
+// ReleaseLock removes the lock file.
 func (m *Manager) ReleaseLock() error {
 	return os.Remove(m.lockFile)
 }
 
-// IsProcessRunning checks if a process with the given PID is still running
+// IsProcessRunning checks if a process with the given PID is still running.
 func (m *Manager) IsProcessRunning(pid int) bool {
-	// First try the standard Unix signal method
 	process, err := os.FindProcess(pid)
 	if err != nil {
 		return false
@@ -68,6 +76,7 @@ func (m *Manager) IsProcessRunning(pid int) bool {
 	return false
 }
 
+// RemoveProcess removes the PID file and releases the lock.
 func (m *Manager) RemoveProcess() error {
 	err := m.removePID()
 	if err != nil {
@@ -107,20 +116,25 @@ func (m *Manager) GetPIDFile() string {
 	return m.pidFile
 }
 
-// CleanupOrphanedLock Removes lock file if the process in PID file is not running.
+// CleanupOrphanedLock removes the lock file if no process currently holds the advisory flock.
+// With flock, no PID check is needed: the OS automatically releases the lock when
+// the holding process exits for any reason (normal exit, crash, SIGKILL, etc.).
 func (m *Manager) CleanupOrphanedLock() error {
 	if !m.LockFileExists() {
 		return nil
 	}
 
-	pid, err := m.ReadPID()
+	f, err := os.OpenFile(m.lockFile, os.O_RDWR, 0644)
 	if err != nil {
-		return m.ReleaseLock()
+		return os.Remove(m.lockFile)
 	}
 
-	if !m.IsProcessRunning(pid) {
-		return m.ReleaseLock()
+	flockErr := syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB)
+	f.Close()
+
+	if flockErr != nil {
+		return nil
 	}
 
-	return nil
+	return os.Remove(m.lockFile)
 }

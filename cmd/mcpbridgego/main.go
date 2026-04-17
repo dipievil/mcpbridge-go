@@ -21,21 +21,16 @@ import (
 
 // startDaemon starts the app in background.
 func startDaemon(pm *pidmanager.Manager) error {
+
 	pm.CleanupOrphanedLock()
 
 	lockFile, err := pm.AcquireLock()
 	if err != nil {
-		if pid, err := pm.ReadPID(); err == nil {
-			if pm.IsProcessRunning(pid) {
-				return fmt.Errorf("MCPBridge is already running (PID: %d)", pid)
-			}
-		}
 
-		pm.CleanupOrphanedLock()
-		lockFile, err = pm.AcquireLock()
-		if err != nil {
-			return fmt.Errorf("MCPBridge startup is already in progress or another instance is running")
+		if pid, err := pm.ReadPID(); err == nil && pm.IsProcessRunning(pid) {
+			return fmt.Errorf("MCPBridge is already running (PID: %d)", pid)
 		}
+		return fmt.Errorf("MCPBridge startup is already in progress or another instance is running")
 	}
 
 	if lockFile != nil {
@@ -102,7 +97,13 @@ func stopDaemon(pm *pidmanager.Manager) error {
 
 // runForeground runs the app in foreground mode.
 func runForeground(pm *pidmanager.Manager) error {
-	// Initialize file logger with rotation
+
+	lockFile, err := pm.AcquireLock()
+	if err != nil {
+		return fmt.Errorf("MCPBridge is already running: %v", err)
+	}
+	defer lockFile.Close()
+
 	fileLogger := logger.InitFileLogger("log.txt")
 	defer fileLogger.Close()
 
