@@ -29,11 +29,12 @@ chmod +x mcpbridgego
 
 ### 2. Configure
 
-Create a config.yml file:
+Create a `config.yaml` file:
 
 ```yaml
-server:
-  host: "0.0.0.0"
+commands:
+  - name: "node"
+    path: "/usr/bin/node"
 
 mcps:
   - name: "proxmox"
@@ -53,10 +54,10 @@ mcps:
 
 ```bash
 # Run in foreground (default, useful for development)
-./mcpbridgego config.yml
+./mcpbridgego
 
 # Or run in background (daemon mode)
-./mcpbridgego --start config.yml
+./mcpbridgego --start
 
 # Stop the background process
 ./mcpbridgego --stop
@@ -71,10 +72,10 @@ MCPBridge supports two execution modes:
 ### Foreground Mode (Default)
 
 ```bash
-./mcpbridgego config.yml
+./mcpbridgego
 ```
 
-Runs in the current terminal. Useful for:
+Runs in the current terminal. Requires `config.yaml` in the current directory. Useful for:
 
 - Development and debugging
 - Monitoring logs in real-time
@@ -84,7 +85,7 @@ Runs in the current terminal. Useful for:
 
 ```bash
 # Start in background
-./mcpbridgego --start config.yml
+./mcpbridgego --start
 
 # Stop the background process
 ./mcpbridgego --stop
@@ -167,14 +168,18 @@ Export MCP configurations for different AI agents with a single command:
 
 ## Configuration Reference
 
-### Server Configuration
+### Commands Registry
 
-```yaml
-server:
-  host: "0.0.0.0"      # Bind address (0.0.0.0 for all interfaces)
-```
+The optional `commands` section registers command aliases with their full paths:
+
+| Field | Type | Description |
+| ----- | ---- | ----------- |
+| `name` | string | Command alias (e.g., `node`, `npx`) |
+| `path` | string | Full path to the executable |
 
 ### MCP Configuration
+
+The application reads configuration from `config.yaml` in the current directory.
 
 Each MCP entry in the `mcps` list requires:
 
@@ -191,8 +196,11 @@ Each MCP entry in the `mcps` list requires:
 ### Example: Multiple MCPs with Advanced Configuration
 
 ```yaml
-server:
-  host: "0.0.0.0"
+commands:
+  - name: "node"
+    path: "/usr/bin/node"
+  - name: "python"
+    path: "/usr/bin/python3"
 
 mcps:
   - name: "proxmox"
@@ -277,22 +285,11 @@ curl http://SERVER_IP:3000/health
 
 #### 4. Root Endpoint (`/`)
 
-Get general information about the MCP service:
+The root endpoint serves as an alias for the SSE endpoint:
 
 ```bash
-curl http://SERVER_IP:3000/
-
-# Response
-{
-  "service": "MCPBridge",
-  "mcp": "proxmox",
-  "port": 3000,
-  "endpoints": {
-    "rpc": "/rpc (POST with application/json)",
-    "sse": "/sse (GET for Server-Sent Events)",
-    "health": "/health (GET)"
-  }
-}
+# Connect to SSE stream via root
+curl -N http://SERVER_IP:3000/
 ```
 
 ### Exporting Configurations for AI Agents
@@ -422,6 +419,56 @@ go test -v -race -coverpkg=./... ./...
 go test -v -run TestBridgeInitialization ./...
 ```
 
+### End-to-End (E2E) Testing
+
+Test the complete MCPBridge functionality with mock MCP servers:
+
+```bash
+# Run all E2E tests (compiles bridge and mock servers automatically)
+make e2e
+
+# Or with go directly
+go test -v -tags=e2e ./tests
+
+# Run all tests including E2E
+make test-all
+```
+
+**What E2E tests do:**
+
+- Creates a lightweight mock MCP server that responds to JSON-RPC calls
+- Starts MCPBridge in foreground mode
+- Tests multiple communication patterns and 4 essential MCP protocol methods for each:
+  1. **ping** - Connection verification
+  2. **initialize** - Protocol initialization with server info
+  3. **resources/list** - Resource discovery
+  4. **tools/list** - Tool discovery
+- Validates responses and cleans up resources
+
+**E2E Test Structure:**
+
+```
+tests/
+├── e2e_test.go              # HTTP/JSON-RPC E2E tests (4 test cases)
+├── e2e_sse_test.go          # Server-Sent Events streaming tests (4 test cases)
+├── mcp_mock_server/
+│   └── main.go              # Lightweight mock MCP server implementation
+└── .env                      # Environment variables for tests
+```
+
+**Communication Patterns Tested:**
+
+1. **HTTP/JSON-RPC** (`e2e_test.go`):
+   - POST requests with JSON-RPC messages to `/rpc` endpoint
+   - Synchronous request-response pattern
+   - Perfect for simple command/query operations
+
+2. **HTTP/SSE** (`e2e_sse_test.go`):
+   - POST requests with JSON-RPC messages to `/sse` endpoint
+   - Server-Sent Events streaming format (`data: {json}\n\n`)
+   - Supports bidirectional communication over HTTP
+   - Ideal for long-lived connections and real-time updates
+
 ### Code Quality
 
 ```bash
@@ -453,8 +500,8 @@ If validation fails, a clear error message is shown with the issue.
 1. **Check the configuration file syntax**
 
    ```bash
-   # Verify YAML is valid
-   ./mcpbridgego config.yml
+   # Verify YAML is valid - requires config.yaml in the current directory
+   ./mcpbridgego
    # MCPBridge will validate before starting
    ```
 
@@ -475,7 +522,7 @@ If validation fails, a clear error message is shown with the issue.
 
    ```bash
    # When running in foreground, stderr from MCPs is logged with [mcp_name stderr] prefix
-   ./mcpbridgego config.yml 2>&1 | grep stderr
+   ./mcpbridgego 2>&1 | grep stderr
    ```
 
 5. **Verify working directory exists (if using `dir` config)**
@@ -546,7 +593,7 @@ If validation fails, a clear error message is shown with the issue.
 
    ```bash
    # Run in foreground to see logging
-   ./mcpbridgego config.yml 2>&1 | grep "Environment variables"
+   ./mcpbridgego 2>&1 | grep "Environment variables"
    ```
 
 ## Contributing
