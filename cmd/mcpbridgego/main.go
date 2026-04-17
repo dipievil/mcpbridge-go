@@ -14,6 +14,7 @@ import (
 
 	"dipievil/mcpbridgego/internal/bridge"
 	"dipievil/mcpbridgego/internal/config"
+	"dipievil/mcpbridgego/internal/logger"
 	"dipievil/mcpbridgego/internal/output"
 	"dipievil/mcpbridgego/internal/pidmanager"
 )
@@ -101,7 +102,10 @@ func stopDaemon(pm *pidmanager.Manager) error {
 
 // runForeground runs the app in foreground mode.
 func runForeground(pm *pidmanager.Manager) error {
-	// Load and validate config
+	// Initialize file logger with rotation
+	fileLogger := logger.InitFileLogger("log.txt")
+	defer fileLogger.Close()
+
 	cfg, err := config.LoadConfig()
 	if err != nil {
 		return err
@@ -127,7 +131,6 @@ func runForeground(pm *pidmanager.Manager) error {
 		mux.HandleFunc("/rpc", b.HandleRPC)
 		mux.HandleFunc("/sse", b.HandleSSE)
 		mux.HandleFunc("/health", b.HandleHealth)
-		// Root route defaults to SSE (MCP standard protocol)
 		mux.HandleFunc("/", b.HandleSSE)
 
 		go func(port int, name string) {
