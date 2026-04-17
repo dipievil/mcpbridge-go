@@ -56,10 +56,39 @@ steps:
     image: plugins/github-release
     settings:
       api_key:
-        from_secret: github_token
+        from_secret: GITHUB_PAT
       files:
         - bin/*
       checksum: sha256
     when:
       ref:
         - refs/tags/v*
+
+---
+kind: pipeline
+type: ssh
+name: deploy
+
+server:
+  host: 
+    from_secret: MCP_SERVER_HOST
+  user: 
+    from_secret: MCP_SSH_USER
+  password:
+    from_secret: MCP_SSH_PASSWORD
+
+steps:
+  - name: deploy
+    environment:
+      INSTALLATION_DIR:
+        from_secret: INFISICAL_CLIENT_ID  
+    commands:
+      - CURRENT_PATH=$(pwd) 
+      - cd ${INSTALLATION_DIR}
+      - mcpbridgego --stop || true
+      - cd ${CURRENT_PATH}
+      - make build
+      - cp bin/mcpbridgego ${INSTALLATION_DIR}
+      - cd ${INSTALLATION_DIR}
+      - mcpbridgego --start
+       
