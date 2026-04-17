@@ -109,11 +109,15 @@ func ResolveCommand(commandName string) (string, error) {
 
 	commands := GetConfigCommands(cfg)
 
+	for _, cmd := range commands {
+		if cmd.Name == commandName {
+			return cmd.Path, nil
+		}
+	}
+
 	if len(commandName) > 0 && commandName[0] == '/' {
-		for _, cmd := range commands {
-			if cmd.Name == commandName {
-				return cmd.Path, nil
-			}
+		if _, err := os.Stat(commandName); err == nil {
+			return commandName, nil
 		}
 	}
 
@@ -136,11 +140,6 @@ func validateMCP(mcp MCPConfig) error {
 
 	if mcp.Command == "" {
 		return fmt.Errorf("MCP %s command is required", mcp.Name)
-	}
-
-	// Resolve the command to verify it exists
-	if _, err := ResolveCommand(mcp.Command); err != nil {
-		return fmt.Errorf("MCP %s: %v", mcp.Name, err)
 	}
 
 	if mcp.EnvFile != "" {
