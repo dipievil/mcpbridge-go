@@ -83,6 +83,7 @@ steps:
     environment:
     commands:
       - make build
+      - go --version
       - CURRENT_PATH=$(pwd)
       - echo "CURRENT_PATH=$CURRENT_PATH"
       - /opt/mcpbridge-go/mcpbridgego --stop
