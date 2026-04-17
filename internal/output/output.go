@@ -141,12 +141,12 @@ func outputToFile(jsonData []byte, filePath string) error {
 // PrintOutputUsage prints usage information for the output command
 func PrintOutputUsage() {
 	fmt.Printf(`%sUsage:%s
-  # Output specific agent to screen (default behavior)
+  # Output specific agent
   mcpbridgego -o claude                              # Claude to screen
   mcpbridgego -o copilot                             # Copilot to screen
   mcpbridgego --output generic                       # Generic to screen
   
-  # Output agent to file (default filename: mcp.json)
+  # Output agent to file
   mcpbridgego -o claude -f                           # Claude to mcp.json
   mcpbridgego --output copilot --file                # Copilot to mcp.json
   
@@ -154,7 +154,7 @@ func PrintOutputUsage() {
   mcpbridgego -o copilot -f ./agents/copilot-mcp.json
   mcpbridgego -f ./config/mcp-config.json            # Generic to custom path
   
-  # Default behavior (generic to screen)
+  # Default behavior
   mcpbridgego -o                                     # Same as: -o generic
   mcpbridgego                                        # If no other args, shows config
 
@@ -176,6 +176,7 @@ func PrintOutputUsage() {
   # Multiple configurations
   mcpbridgego -o claude -f claude-mcp.json
   mcpbridgego -o copilot -f copilot-mcp.json
+	
 `, ColorBold, ColorReset, ColorBold, ColorReset, ColorBold, ColorReset)
 }
 
@@ -184,11 +185,13 @@ func PrintMainHelp() {
 	fmt.Println("MCPBridge - Model Context Protocol Bridge")
 	fmt.Println()
 	fmt.Println("Usage:")
-	fmt.Println("  mcpbridgego [options] [config_file]")
+	fmt.Println("  mcpbridgego [options]")
 	fmt.Println()
 	fmt.Println("Common options:")
-	fmt.Println("  -start, --start          Start MCPBridge in background")
-	fmt.Println("  -stop, --stop            Stop the running MCPBridge")
+	fmt.Println("  -s, --start              Start MCPBridge in background")
+	fmt.Println("  -t, --stop               Stop the running MCPBridge")
+	fmt.Println("  --status                 Check if MCPBridge is running")
+	fmt.Println("  -c, --config             Validate the config file")
 	fmt.Println("  -h, --help               Show this help message")
 	fmt.Println()
 	fmt.Println("Output JSON template:")

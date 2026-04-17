@@ -34,6 +34,21 @@ type MCPConfig struct {
 type Config struct {
 	Commands []CommandConfig `yaml:"commands"`
 	MCPS     []MCPConfig     `yaml:"mcps"`
+	AppArgs  AppArgs         `yaml:"-"`
+}
+
+// AppArgs are the command-line arguments passed to the application, stored here for easy access across the app
+type AppArgs struct {
+	AgentName      string
+	OutputAsFile   bool
+	OutputConfig   bool
+	FilePath       string
+	RunStart       bool
+	RunStop        bool
+	RunForeground  bool
+	GetStatus      bool
+	ShowHelp       bool
+	ValidateConfig bool
 }
 
 func LoadConfig() (*Config, error) {

@@ -51,8 +51,6 @@ func TestMCPConfig(t *testing.T) {
 		Name:    "test-mcp",
 		Port:    3000,
 		Command: "echo",
-		Args:    []string{"test"},
-		EnvFile: "/tmp/test.env",
 	}
 
 	if cfg.Name != "test-mcp" {

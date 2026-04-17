@@ -62,7 +62,7 @@ func NewBridge(mcpConfig config.MCPConfig) (*Bridge, error) {
 
 	// Use pre-loaded and merged environment variables from config validation
 	envs := mcpConfig.MergedEnv
-	log.Printf("Environment variables for MCP %s: %s", mcpConfig.Name, maskEnvVars(envs))
+	log.Printf("Environment variables for MCP %s: %s", mcpConfig.Name, envs)
 
 	cmd := exec.Command(resolvedCommand, mcpConfig.Args...)
 	if mcpConfig.Dir != "" {

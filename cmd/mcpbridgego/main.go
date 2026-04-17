@@ -1,7 +1,6 @@
 package main
 
 import (
-	"flag"
 	"fmt"
 	"log"
 	"net/http"
@@ -62,19 +61,28 @@ func startDaemon(pm *pidmanager.Manager) error {
 	return nil
 }
 
-// stopDaemon stops the running background process.
-func stopDaemon(pm *pidmanager.Manager) error {
+// getRunningPID returns the PID if a process is running, or an error
+func getRunningPID(pm *pidmanager.Manager) (int, error) {
 	pid, err := pm.ReadPID()
 	if err != nil {
-		return fmt.Errorf("MCPBridge is not running (no PID file found)")
+		return 0, fmt.Errorf("MCPBridge is not running (no PID file found)")
 	}
 
 	if !pm.IsProcessRunning(pid) {
 		if err := pm.RemoveProcess(); err != nil {
 			log.Printf("Warning: failed to remove MCPBridge process: %v", err)
 		}
+		return 0, fmt.Errorf("MCPBridge is not running (PID %d not found)", pid)
+	}
 
-		return fmt.Errorf("MCPBridge is not running (PID %d not found)", pid)
+	return pid, nil
+}
+
+// stopDaemon stops the running background process.
+func stopDaemon(pm *pidmanager.Manager) error {
+	pid, err := getRunningPID(pm)
+	if err != nil {
+		return err
 	}
 
 	process, err := os.FindProcess(pid)
@@ -92,6 +100,181 @@ func stopDaemon(pm *pidmanager.Manager) error {
 	}
 
 	fmt.Printf("MCPBridge stopped (PID: %d)\n", pid)
+	return nil
+}
+
+// checkStatus checks if MCPBridge is running.
+func checkStatus(pm *pidmanager.Manager) error {
+	pid, err := getRunningPID(pm)
+	if err != nil {
+		fmt.Println("MCPBridge is not running")
+		return nil
+	}
+
+	fmt.Printf("MCPBridge is running (PID: %d)\n", pid)
+	return nil
+}
+
+// validateConfig validates the config file.
+func validateConfig() error {
+	cfg, err := config.LoadConfig()
+	if err != nil {
+		return fmt.Errorf("failed to load config: %v", err)
+	}
+
+	if err := config.Validate(cfg); err != nil {
+		return fmt.Errorf("config validation failed: %v", err)
+	}
+
+	fmt.Println("Config validated successfully")
+	return nil
+}
+
+// parseArgs parses command-line arguments and returns an AppArgs struct.
+func parseArgs(osArgs []string) (config.AppArgs, error) {
+
+	appArgs := config.AppArgs{}
+
+	for i := 0; i < len(osArgs); i++ {
+		arg := osArgs[i]
+		switch arg {
+		case "-o", "--output":
+			if i+1 < len(osArgs) && !strings.HasPrefix(osArgs[i+1], "-") {
+				appArgs.AgentName = osArgs[i+1]
+				appArgs.OutputConfig = true
+				i++
+			} else {
+				appArgs.AgentName = "generic"
+				appArgs.OutputConfig = true
+			}
+		case "-f", "--file":
+			appArgs.OutputAsFile = true
+			if i+1 < len(osArgs) && !strings.HasPrefix(osArgs[i+1], "-") {
+				appArgs.FilePath = osArgs[i+1]
+				i++
+			}
+		case "-h", "--help":
+			appArgs.ShowHelp = true
+		case "-c", "--config":
+			appArgs.ValidateConfig = true
+		case "-s", "--start":
+			appArgs.RunStart = true
+		case "-t", "--stop":
+			appArgs.RunStop = true
+		case "--status":
+			appArgs.GetStatus = true
+		case "-r", "--run":
+			appArgs.RunForeground = true
+		default:
+			return config.AppArgs{}, fmt.Errorf("unknown argument: %s", arg)
+		}
+	}
+
+	if err := validateConflictArgs(appArgs); err != nil {
+		return config.AppArgs{}, err
+	}
+
+	return appArgs, nil
+}
+
+// validateConflictArgs checks for conflicting command-line arguments.
+func validateConflictArgs(appArgs config.AppArgs) error {
+	if appArgs.OutputConfig || appArgs.AgentName != "" || appArgs.OutputAsFile {
+		if appArgs.RunStart || appArgs.RunStop || appArgs.RunForeground || appArgs.GetStatus || appArgs.ValidateConfig {
+			return fmt.Errorf("cannot use --output/--file flags with --start, --stop, --run, --status or --config")
+		}
+	}
+
+	if appArgs.RunStart && appArgs.RunStop {
+		return fmt.Errorf("cannot use --start and --stop together")
+	}
+
+	if appArgs.RunStart && appArgs.GetStatus {
+		return fmt.Errorf("cannot use --start and --status together")
+	}
+
+	if appArgs.RunStop && appArgs.GetStatus {
+		return fmt.Errorf("cannot use --stop and --status together")
+	}
+
+	if appArgs.ValidateConfig && (appArgs.RunStart || appArgs.RunStop || appArgs.RunForeground || appArgs.GetStatus) {
+		return fmt.Errorf("cannot use --config with --start, --stop, --run, or --status")
+	}
+
+	return nil
+}
+
+func main() {
+
+	osArgs := os.Args[1:]
+
+	if len(osArgs) == 0 {
+		output.PrintMainHelp()
+		return
+	}
+
+	appArgs, err := parseArgs(osArgs)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	if appArgs.ValidateConfig {
+		if err := validateConfig(); err != nil {
+			log.Fatal(err)
+		}
+		return
+	}
+
+	if appArgs.OutputConfig {
+		if err := outputConfig(appArgs); err != nil {
+			log.Fatal(err)
+		}
+		return
+	}
+	pm := pidmanager.New()
+
+	if appArgs.GetStatus {
+		if err := checkStatus(pm); err != nil {
+			log.Fatal(err)
+		}
+		return
+	}
+
+	if appArgs.RunStart {
+		if err := startDaemon(pm); err != nil {
+			log.Fatal(err)
+		}
+		return
+	}
+
+	if appArgs.RunStop {
+		if err := stopDaemon(pm); err != nil {
+			log.Fatal(err)
+		}
+		return
+	}
+
+	if appArgs.RunForeground {
+		if err := runForeground(pm); err != nil {
+			log.Fatal(err)
+		}
+		return
+	}
+
+	log.Println("Showing help message")
+	output.PrintMainHelp()
+}
+
+func outputConfig(appArgs config.AppArgs) error {
+	outputCfg, err := output.ParseOutputConfig(appArgs.AgentName, appArgs.OutputAsFile, appArgs.FilePath)
+	if err != nil {
+		output.PrintOutputUsage()
+
+		if err := output.OutputMCPConfig(outputCfg); err != nil {
+			return fmt.Errorf("%sError:%s %v", output.ColorYellow, output.ColorReset, err)
+		}
+	}
+
 	return nil
 }
 
@@ -154,94 +337,4 @@ func runForeground(pm *pidmanager.Manager) error {
 		log.Printf("Warning: failed to remove MCPBridge process: %v", err)
 	}
 	return nil
-}
-
-func main() {
-
-	var agent string
-	var isFile bool
-	var filePath string
-	var start, stop, help bool
-
-	osArgs := os.Args[1:]
-	newArgs := []string{}
-	for i := 0; i < len(osArgs); i++ {
-		arg := osArgs[i]
-		switch arg {
-		case "-o", "--output":
-			if i+1 < len(osArgs) && !strings.HasPrefix(osArgs[i+1], "-") {
-				agent = osArgs[i+1]
-				i++
-			} else {
-				agent = "generic"
-			}
-		case "-f", "--file":
-			isFile = true
-			if i+1 < len(osArgs) && !strings.HasPrefix(osArgs[i+1], "-") {
-				filePath = osArgs[i+1]
-				i++
-			}
-		case "-h", "--help":
-			help = true
-		case "-start", "--start":
-			start = true
-		case "-stop", "--stop":
-			stop = true
-		default:
-			newArgs = append(newArgs, arg)
-		}
-	}
-
-	os.Args = append([]string{os.Args[0]}, newArgs...)
-
-	if help {
-		output.PrintMainHelp()
-		return
-	}
-
-	if agent != "" || isFile {
-		if start || stop {
-			log.Fatal("Cannot use --output/--file flags with --start or --stop")
-		}
-
-		outputCfg, err := output.ParseOutputConfig(agent, isFile, filePath)
-		if err != nil {
-			fmt.Printf("%sError:%s %v\n", output.ColorYellow, output.ColorReset, err)
-			output.PrintOutputUsage()
-			os.Exit(1)
-		}
-
-		if err := output.OutputMCPConfig(outputCfg); err != nil {
-			fmt.Printf("%sError:%s %v\n", output.ColorYellow, output.ColorReset, err)
-			os.Exit(1)
-		}
-		return
-	}
-
-	if start && stop {
-		log.Fatal("Cannot use --start and --stop together")
-	}
-
-	pm := pidmanager.New()
-
-	if start {
-		flag.Parse()
-		if err := startDaemon(pm); err != nil {
-			log.Fatal(err)
-		}
-		return
-	}
-
-	if stop {
-		if err := stopDaemon(pm); err != nil {
-			log.Fatal(err)
-		}
-		return
-	}
-
-	flag.Parse()
-
-	if err := runForeground(pm); err != nil {
-		log.Fatal(err)
-	}
 }
