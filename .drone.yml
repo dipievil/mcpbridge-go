@@ -25,7 +25,7 @@ steps:
   - name: test
     image: golang:1.26.2-alpine
     commands:
-      - go test -v -race -coverpkg=./... ./...
+      - CGO_ENABLED=0 go test -v -race -coverpkg=./... ./...
 
   - name: build
     image: golang:1.26.2-alpine
@@ -80,15 +80,14 @@ server:
 steps:
   - name: deploy
     environment:
-      INSTALLATION_DIR:
-        from_secret: INFISICAL_CLIENT_ID  
     commands:
-      - CURRENT_PATH=$(pwd) 
-      - cd ${INSTALLATION_DIR}
-      - mcpbridgego --stop || true
+      - CURRENT_PATH=$(pwd)
+      - echo "CURRENT_PATH=$CURRENT_PATH"
+      - cd /opt/mcpbridge-go
+      - ./mcpbridgego --stop || true
       - cd ${CURRENT_PATH}
       - make build
-      - cp bin/mcpbridgego ${INSTALLATION_DIR}
-      - cd ${INSTALLATION_DIR}
-      - mcpbridgego --start
+      - cp bin/mcpbridgego /opt/mcpbridge-go
+      - cd /opt/mcpbridge-go
+      - ./mcpbridgego --start
        
