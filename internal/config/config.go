@@ -49,6 +49,7 @@ type AppArgs struct {
 	GetStatus      bool
 	ShowHelp       bool
 	ValidateConfig bool
+	ShowVersion    bool
 }
 
 func LoadConfig() (*Config, error) {

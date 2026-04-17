@@ -85,6 +85,10 @@ func OutputMCPConfig(cfg OutputConfig) error {
 	return nil
 }
 
+func PrintVersion(currentVersion string) {
+	fmt.Printf("MCPBridge Version: %s\n", currentVersion)
+}
+
 // generateAgentConfig builds an agent-specific MCP config dynamically from config.yaml
 func generateAgentConfig(agent string) (map[string]interface{}, error) {
 	appCfg, err := config.LoadConfig()
