@@ -82,8 +82,8 @@ steps:
   - name: deploy
     environment:
     commands:
+      - export PATH=$PATH:/usr/local/go/bin
       - make build
-      - go --version
       - CURRENT_PATH=$(pwd)
       - echo "CURRENT_PATH=$CURRENT_PATH"
       - /opt/mcpbridge-go/mcpbridgego --stop
