@@ -180,28 +180,33 @@ func PrintOutputUsage() {
   mcpbridgego -o claude -f claude-mcp.json
   mcpbridgego -o copilot -f copilot-mcp.json
 	
-`, ColorBold, ColorReset, ColorBold, ColorReset, ColorBold, ColorReset)
+`, ColorBold, ColorReset, ColorBold, ColorReset)
 }
 
 // PrintMainHelp prints the main help message
 func PrintMainHelp() {
-	fmt.Println("MCPBridge - Model Context Protocol Bridge")
-	fmt.Println()
-	fmt.Println("Usage:")
-	fmt.Println("  mcpbridgego [options]")
-	fmt.Println()
-	fmt.Println("Common options:")
-	fmt.Println("  -s, --start              Start MCPBridge in background")
-	fmt.Println("  -t, --stop               Stop the running MCPBridge")
-	fmt.Println("  -r, --run                Run MCPBridge in foreground (no daemon)")
-	fmt.Println("  --status                 Check if MCPBridge is running")
-	fmt.Println("  -c, --config             Validate the config file")
-	fmt.Println("  -h, --help               Show this help message")
-	fmt.Println()
-	fmt.Println("Output JSON template:")
-	fmt.Println("  -o, --output <agent>     Agent type: claude, copilot, generic (default: generic)")
-	fmt.Println("  -f, --file [filename]    Output template to file (default: mcp.json)")
-	fmt.Println()
+	fmt.Printf(`
+%s================================================
+                %sMCP BRIDGE GO%s 
+ %sA Model Context Protocol Bridge written in GO
+===============================================%s
+
+%sUsage:%s
+  mcpbridgego [options]
+
+%sCommon options:%s
+  -s, --start              Start MCPBridge in background
+  -t, --stop               Stop the running MCPBridge
+  -r, --run                Run MCPBridge in foreground (no daemon)
+  --status                 Check if MCPBridge is running
+  -c, --config             Validate the config file
+  -h, --help               Show this help message
+
+%sOutput JSON template:%s
+  -o, --output <agent>     Agent type: claude, copilot, generic (default: generic)
+  -f, --file [filename]    Output template to file (default: mcp.json)`,
+		ColorBlue, ColorBold, ColorReset, ColorBlue, ColorReset, ColorBold, ColorReset, ColorBold, ColorReset, ColorBold, ColorReset)
+
 	PrintOutputUsage()
 }
 
