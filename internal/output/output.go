@@ -101,9 +101,13 @@ func generateAgentConfig(agent string) (map[string]interface{}, error) {
 	servers := make(map[string]interface{})
 	for _, mcp := range appCfg.MCPS {
 		url := fmt.Sprintf("%s://%s:%d", scheme, localIP, mcp.Port)
-		servers[mcp.Name] = map[string]interface{}{
+		serverEntry := map[string]interface{}{
 			"url": url,
 		}
+		if agent == "copilot" {
+			serverEntry["type"] = scheme
+		}
+		servers[mcp.Name] = serverEntry
 	}
 
 	return map[string]interface{}{
@@ -142,7 +146,7 @@ func outputToFile(jsonData []byte, filePath string) error {
 func PrintOutputUsage() {
 	fmt.Printf(`%sUsage:%s
   # Output specific agent
-  mcpbridgego -o claude                              # Claude to screen
+  mcpbridgego -o claude                              # Claude config
   mcpbridgego -o copilot                             # Copilot to screen
   mcpbridgego --output generic                       # Generic to screen
   
@@ -157,11 +161,6 @@ func PrintOutputUsage() {
   # Default behavior
   mcpbridgego -o                                     # Same as: -o generic
   mcpbridgego                                        # If no other args, shows config
-
-%sOptions:%s
-  -o, --output <agent>   Agent type: claude, copilot, generic (default: generic)
-  -f, --file [path]      Output to file (default path: mcp.json)
-  -h, --help             Show this help message
 
 %sExamples:%s
   # Output Claude MCP configuration to screen (green colored)
@@ -190,6 +189,7 @@ func PrintMainHelp() {
 	fmt.Println("Common options:")
 	fmt.Println("  -s, --start              Start MCPBridge in background")
 	fmt.Println("  -t, --stop               Stop the running MCPBridge")
+	fmt.Println("  -r, --run                Run MCPBridge in foreground (no daemon)")
 	fmt.Println("  --status                 Check if MCPBridge is running")
 	fmt.Println("  -c, --config             Validate the config file")
 	fmt.Println("  -h, --help               Show this help message")

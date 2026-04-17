@@ -18,6 +18,8 @@ import (
 	"dipievil/mcpbridgego/internal/pidmanager"
 )
 
+var buildVersion = "dev"
+
 // startDaemon starts the app in background.
 func startDaemon(pm *pidmanager.Manager) error {
 
@@ -269,10 +271,11 @@ func outputConfig(appArgs config.AppArgs) error {
 	outputCfg, err := output.ParseOutputConfig(appArgs.AgentName, appArgs.OutputAsFile, appArgs.FilePath)
 	if err != nil {
 		output.PrintOutputUsage()
+		return fmt.Errorf("%sError:%s %v", output.ColorYellow, output.ColorReset, err)
+	}
 
-		if err := output.OutputMCPConfig(outputCfg); err != nil {
-			return fmt.Errorf("%sError:%s %v", output.ColorYellow, output.ColorReset, err)
-		}
+	if err := output.OutputMCPConfig(outputCfg); err != nil {
+		return fmt.Errorf("%sError:%s %v", output.ColorYellow, output.ColorReset, err)
 	}
 
 	return nil
