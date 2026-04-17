@@ -44,7 +44,7 @@ type Bridge struct {
 	stdout        io.ReadCloser
 	stderr        io.ReadCloser
 	cmd           *exec.Cmd
-	responseChan  map[interface{}]chan *JSONRPCMessage
+	responseChan  map[string]chan *JSONRPCMessage
 	nextMessageID int64
 	initialized   bool
 }
@@ -53,7 +53,7 @@ type Bridge struct {
 func NewBridge(mcpConfig config.MCPConfig) (*Bridge, error) {
 	b := &Bridge{
 		config:       mcpConfig,
-		responseChan: make(map[interface{}]chan *JSONRPCMessage),
+		responseChan: make(map[string]chan *JSONRPCMessage),
 	}
 
 	resolvedCommand, err := config.ResolveCommand(mcpConfig.Command)
@@ -77,7 +77,7 @@ func NewBridge(mcpConfig config.MCPConfig) (*Bridge, error) {
 
 	maps.Copy(envs, mcpConfig.EnvVars)
 
-	log.Printf("Environment variables for MCP %s: %v", mcpConfig.Name, envs)
+	log.Printf("Environment variables for MCP %s: %s", mcpConfig.Name, maskEnvVars(envs))
 
 	cmd := exec.Command(resolvedCommand, mcpConfig.Args...)
 	if mcpConfig.Dir != "" {
@@ -115,6 +115,25 @@ func NewBridge(mcpConfig config.MCPConfig) (*Bridge, error) {
 	return b, nil
 }
 
+// idKey normalizes a JSON-RPC message ID to a string key for map lookups.
+// This avoids the int64 vs float64 mismatch caused by JSON unmarshaling numbers as float64.
+func idKey(id interface{}) string {
+	return fmt.Sprintf("%v", id)
+}
+
+// maskEnvVars returns a masked representation of environment variables for safe logging.
+func maskEnvVars(envs map[string]string) string {
+	masked := make(map[string]string, len(envs))
+	for k, v := range envs {
+		if len(v) <= 4 {
+			masked[k] = "****"
+		} else {
+			masked[k] = v[:2] + "****" + v[len(v)-2:]
+		}
+	}
+	return fmt.Sprintf("%v", masked)
+}
+
 // readMessages reads JSON-RPC messages from MCP's stdout in background and dispatches them to waiting clients.
 func (b *Bridge) readMessages() {
 	scanner := bufio.NewScanner(b.stdout)
@@ -133,10 +152,11 @@ func (b *Bridge) readMessages() {
 		}
 
 		b.mu.Lock()
-		if ch, exists := b.responseChan[msg.ID]; exists && msg.ID != nil {
+		key := idKey(msg.ID)
+		if ch, exists := b.responseChan[key]; exists && msg.ID != nil {
 			log.Printf("[%s] Dispatching response for ID %v", b.config.Name, msg.ID)
 			ch <- &msg
-			delete(b.responseChan, msg.ID)
+			delete(b.responseChan, key)
 		} else {
 			log.Printf("[%s] Message ID %v not found in responseChan, trying to dispatch to first available channel", b.config.Name, msg.ID)
 			for id, respCh := range b.responseChan {
@@ -172,7 +192,7 @@ func (b *Bridge) SendMessage(msg *JSONRPCMessage, timeout time.Duration) (*JSONR
 	responseCh := make(chan *JSONRPCMessage, 1)
 	if msg.ID != nil {
 		b.mu.Lock()
-		b.responseChan[msg.ID] = responseCh
+		b.responseChan[idKey(msg.ID)] = responseCh
 		b.mu.Unlock()
 	}
 
@@ -190,7 +210,7 @@ func (b *Bridge) SendMessage(msg *JSONRPCMessage, timeout time.Duration) (*JSONR
 		// Clean up the response channel on error
 		if msg.ID != nil {
 			b.mu.Lock()
-			delete(b.responseChan, msg.ID)
+			delete(b.responseChan, idKey(msg.ID))
 			b.mu.Unlock()
 		}
 		return nil, fmt.Errorf("failed to write to stdin: %v", err)
@@ -273,6 +293,12 @@ func (b *Bridge) HandleRPC(w http.ResponseWriter, r *http.Request) {
 
 // HandleSSE handles Server-Sent Events streaming.
 func (b *Bridge) HandleSSE(w http.ResponseWriter, r *http.Request) {
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		http.Error(w, "Streaming not supported", http.StatusInternalServerError)
+		return
+	}
+
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
@@ -281,15 +307,10 @@ func (b *Bridge) HandleSSE(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
 
 	w.WriteHeader(http.StatusOK)
-	flusher, ok := w.(http.Flusher)
-	if !ok {
-		http.Error(w, "Streaming not supported", http.StatusInternalServerError)
-		return
-	}
 	flusher.Flush()
 
 	responseCh := make(chan *JSONRPCMessage, 100)
-	clientID := time.Now().UnixNano()
+	clientID := idKey(time.Now().UnixNano())
 
 	b.mu.Lock()
 	b.responseChan[clientID] = responseCh

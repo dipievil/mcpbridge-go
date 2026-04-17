@@ -26,41 +26,11 @@ type OutputConfig struct {
 	FilePath string
 }
 
-// AgentTemplate contains MCP configuration templates for different agents
-var AgentTemplates = map[string]map[string]interface{}{
-	"claude": {
-		"servers": map[string]interface{}{
-			"context7": map[string]interface{}{
-				"url": "http://localhost:3001",
-			},
-			"kubernetes": map[string]interface{}{
-				"url": "sse://192.168.1.100:3001",
-			},
-			"database": map[string]interface{}{
-				"url": "sse://192.168.1.100:3002",
-			},
-		},
-	},
-	"copilot": {
-		"servers": map[string]interface{}{
-			"context7": map[string]interface{}{
-				"url": "http://localhost:3001",
-			},
-			"kubernetes": map[string]interface{}{
-				"url": "sse://192.168.1.100:3001",
-			},
-			"database": map[string]interface{}{
-				"url": "sse://192.168.1.100:3002",
-			},
-		},
-	},
-	"generic": {
-		"servers": map[string]interface{}{
-			"example_server": map[string]interface{}{
-				"url": "http://localhost:3000",
-			},
-		},
-	},
+// agentURLScheme maps agent names to their preferred URL scheme
+var agentURLScheme = map[string]string{
+	"claude":  "sse",
+	"copilot": "http",
+	"generic": "http",
 }
 
 // ParseOutputConfig parses output configuration from CLI arguments
@@ -98,9 +68,9 @@ func ParseOutputConfig(agent string, isFile bool, filePath string) (OutputConfig
 
 // OutputMCPConfig outputs MCP configuration based on the provided options
 func OutputMCPConfig(cfg OutputConfig) error {
-	template, exists := AgentTemplates[cfg.Agent]
-	if !exists {
-		return fmt.Errorf("unknown agent type: %s. Supported agents: claude, copilot, generic", cfg.Agent)
+	template, err := generateAgentConfig(cfg.Agent)
+	if err != nil {
+		return err
 	}
 
 	jsonData, err := json.MarshalIndent(template, "", "  ")
@@ -113,6 +83,32 @@ func OutputMCPConfig(cfg OutputConfig) error {
 	}
 	outputToScreen(jsonData)
 	return nil
+}
+
+// generateAgentConfig builds an agent-specific MCP config dynamically from config.yaml
+func generateAgentConfig(agent string) (map[string]interface{}, error) {
+	appCfg, err := config.LoadConfig()
+	if err != nil {
+		return nil, fmt.Errorf("failed to load configuration: %v", err)
+	}
+
+	localIP := getLocalIPForServer()
+	scheme := agentURLScheme[agent]
+	if scheme == "" {
+		scheme = "http"
+	}
+
+	servers := make(map[string]interface{})
+	for _, mcp := range appCfg.MCPS {
+		url := fmt.Sprintf("%s://%s:%d", scheme, localIP, mcp.Port)
+		servers[mcp.Name] = map[string]interface{}{
+			"url": url,
+		}
+	}
+
+	return map[string]interface{}{
+		"servers": servers,
+	}, nil
 }
 
 // outputToScreen prints JSON to screen with green color
@@ -191,11 +187,11 @@ func PrintMainHelp() {
 	fmt.Println("  mcpbridgego [options] [config_file]")
 	fmt.Println()
 	fmt.Println("Common options:")
-	fmt.Println("  -start                   Start MCPBridge in background")
-	fmt.Println("  -stop                    Stop the running MCPBridge")
+	fmt.Println("  -start, --start          Start MCPBridge in background")
+	fmt.Println("  -stop, --stop            Stop the running MCPBridge")
 	fmt.Println("  -h, --help               Show this help message")
 	fmt.Println()
-	fmt.Println("Output yml template:")
+	fmt.Println("Output JSON template:")
 	fmt.Println("  -o, --output <agent>     Agent type: claude, copilot, generic (default: generic)")
 	fmt.Println("  -f, --file [filename]    Output template to file (default: mcp.json)")
 	fmt.Println()
@@ -223,31 +219,6 @@ func getLocalIPForServer() string {
 	return defaultIP
 }
 
-// generateDynamicMCPConfig generates MCP configuration from config file
-// Returns JSON representation of MCP servers
-func generateDynamicMCPConfig() (map[string]interface{}, error) {
-
-	cfg, err := config.LoadConfig()
-
-	if err != nil {
-		return nil, fmt.Errorf("failed to load configuration: %v", err)
-	}
-
-	localIP := getLocalIPForServer()
-
-	servers := make(map[string]interface{})
-	for _, mcp := range cfg.MCPS {
-		url := fmt.Sprintf("http://%s:%d", localIP, mcp.Port)
-		servers[mcp.Name] = map[string]interface{}{
-			"url": url,
-		}
-	}
-
-	return map[string]interface{}{
-		"servers": servers,
-	}, nil
-}
-
 // DisplayAgentCfgInfo displays startup information when MCPBridge starts in background mode
 // Shows the dynamic MCP configuration based on the config file
 func DisplayAgentCfgInfo() {
@@ -255,7 +226,7 @@ func DisplayAgentCfgInfo() {
 	fmt.Printf("%sMCP Configuration for your agents:%s\n", ColorBold, ColorBlue)
 	fmt.Println()
 
-	config, err := generateDynamicMCPConfig()
+	config, err := generateAgentConfig("generic")
 	if err != nil {
 		fmt.Printf("%sWarning: Could not generate configuration: %v%s\n", ColorYellow, err, ColorReset)
 		return

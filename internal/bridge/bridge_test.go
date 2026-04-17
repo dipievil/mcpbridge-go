@@ -103,7 +103,7 @@ func TestHandleRPC_MethodNotAllowed(t *testing.T) {
 	}
 	bridge := &Bridge{
 		config:        cfg,
-		responseChan:  make(map[interface{}]chan *JSONRPCMessage),
+		responseChan:  make(map[string]chan *JSONRPCMessage),
 		initialized:   true,
 		nextMessageID: 0,
 	}
@@ -127,7 +127,7 @@ func TestHandleRPC_CORSHeaders(t *testing.T) {
 	}
 	bridge := &Bridge{
 		config:        cfg,
-		responseChan:  make(map[interface{}]chan *JSONRPCMessage),
+		responseChan:  make(map[string]chan *JSONRPCMessage),
 		initialized:   true,
 		nextMessageID: 0,
 	}
@@ -157,7 +157,7 @@ func TestHandleRPC_InvalidJSON(t *testing.T) {
 	}
 	bridge := &Bridge{
 		config:        cfg,
-		responseChan:  make(map[interface{}]chan *JSONRPCMessage),
+		responseChan:  make(map[string]chan *JSONRPCMessage),
 		initialized:   true,
 		nextMessageID: 0,
 	}
@@ -198,7 +198,7 @@ func TestHandleHealth(t *testing.T) {
 	}
 	b := &Bridge{
 		config:        cfg,
-		responseChan:  make(map[interface{}]chan *JSONRPCMessage),
+		responseChan:  make(map[string]chan *JSONRPCMessage),
 		initialized:   true,
 		nextMessageID: 0,
 	}
@@ -238,7 +238,7 @@ func TestBridgeInitialized(t *testing.T) {
 	}
 	bridge := &Bridge{
 		config:        cfg,
-		responseChan:  make(map[interface{}]chan *JSONRPCMessage),
+		responseChan:  make(map[string]chan *JSONRPCMessage),
 		nextMessageID: 0,
 		initialized:   false,
 	}
@@ -268,7 +268,7 @@ func TestClose(t *testing.T) {
 	}
 	b := &Bridge{
 		config:        cfg,
-		responseChan:  make(map[interface{}]chan *JSONRPCMessage),
+		responseChan:  make(map[string]chan *JSONRPCMessage),
 		nextMessageID: 0,
 		initialized:   true,
 	}

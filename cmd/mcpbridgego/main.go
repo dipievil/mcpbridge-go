@@ -135,7 +135,9 @@ func runForeground(pm *pidmanager.Manager) error {
 
 		go func(port int, name string) {
 			log.Printf("Starting MCP %s on port %d", name, port)
-			http.ListenAndServe(fmt.Sprintf(":%d", port), mux)
+			if err := http.ListenAndServe(fmt.Sprintf(":%d", port), mux); err != nil {
+				log.Fatalf("Failed to start HTTP server for MCP %s on port %d: %v", name, port, err)
+			}
 		}(mcp.Port, mcp.Name)
 	}
 
@@ -180,9 +182,9 @@ func main() {
 			}
 		case "-h", "--help":
 			help = true
-		case "-start":
+		case "-start", "--start":
 			start = true
-		case "-stop":
+		case "-stop", "--stop":
 			stop = true
 		default:
 			newArgs = append(newArgs, arg)

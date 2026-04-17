@@ -2,16 +2,36 @@ package config
 
 import (
 	"os"
-	"path/filepath"
 	"testing"
 )
 
-func TestLoadConfig(t *testing.T) {
-	// Create a temporary config file
+// setupTestConfig creates a config.yaml in a temp dir and changes to that dir.
+// Returns a cleanup function to restore the original working directory.
+func setupTestConfig(t *testing.T, content string) {
+	t.Helper()
 	tmpDir := t.TempDir()
-	configFile := filepath.Join(tmpDir, "test_config.yaml")
+	configFile := tmpDir + "/config.yaml"
 
-	configContent := `
+	if err := os.WriteFile(configFile, []byte(content), 0644); err != nil {
+		t.Fatalf("failed to write config file: %v", err)
+	}
+
+	origDir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("failed to get working directory: %v", err)
+	}
+
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatalf("failed to change directory: %v", err)
+	}
+
+	t.Cleanup(func() {
+		os.Chdir(origDir)
+	})
+}
+
+func TestLoadConfig(t *testing.T) {
+	setupTestConfig(t, `
 mcps:
   - name: claude
     port: 3000
@@ -22,19 +42,13 @@ mcps:
     port: 3001
     command: echo
     args: ["world"]
-`
+`)
 
-	if err := os.WriteFile(configFile, []byte(configContent), 0644); err != nil {
-		t.Fatalf("failed to write config file: %v", err)
-	}
-
-	// Load config
 	cfg, err := LoadConfig()
 	if err != nil {
 		t.Fatalf("failed to load config: %v", err)
 	}
 
-	// Verify config loaded correctly
 	if len(cfg.MCPS) != 2 {
 		t.Errorf("expected 2 MCPs, got %d", len(cfg.MCPS))
 	}
@@ -48,24 +62,27 @@ mcps:
 	}
 }
 
-func TestValidate(t *testing.T) {
-	// Create a temporary config file with valid MCPs
+func TestLoadConfigMissing(t *testing.T) {
 	tmpDir := t.TempDir()
-	configFile := filepath.Join(tmpDir, "test_config.yaml")
+	origDir, _ := os.Getwd()
+	os.Chdir(tmpDir)
+	t.Cleanup(func() { os.Chdir(origDir) })
 
-	configContent := `
+	_, err := LoadConfig()
+	if err == nil {
+		t.Error("expected error when config.yaml is missing")
+	}
+}
+
+func TestValidate(t *testing.T) {
+	setupTestConfig(t, `
 mcps:
   - name: echo
     port: 3000
     command: echo
     args: ["hello"]
-`
+`)
 
-	if err := os.WriteFile(configFile, []byte(configContent), 0644); err != nil {
-		t.Fatalf("failed to write config file: %v", err)
-	}
-
-	// Load and validate config
 	cfg, err := LoadConfig()
 	if err != nil {
 		t.Fatalf("failed to load config: %v", err)
@@ -77,19 +94,10 @@ mcps:
 }
 
 func TestValidateEmptyMCPs(t *testing.T) {
-	// Create a temporary config file with no MCPs
-	tmpDir := t.TempDir()
-	configFile := filepath.Join(tmpDir, "test_config.yaml")
-
-	configContent := `
+	setupTestConfig(t, `
 mcps: []
-`
+`)
 
-	if err := os.WriteFile(configFile, []byte(configContent), 0644); err != nil {
-		t.Fatalf("failed to write config file: %v", err)
-	}
-
-	// Load and validate config
 	cfg, err := LoadConfig()
 	if err != nil {
 		t.Fatalf("failed to load config: %v", err)
@@ -101,80 +109,52 @@ mcps: []
 }
 
 func TestValidateInvalidPort(t *testing.T) {
-	// Create a temporary config file with invalid port
-	tmpDir := t.TempDir()
-	configFile := filepath.Join(tmpDir, "test_config.yaml")
-
-	configContent := `
+	setupTestConfig(t, `
 mcps:
   - name: test
-    port: 99999 
+    port: 99999
     command: echo
     args: ["hello"]
-`
+`)
 
-	if err := os.WriteFile(configFile, []byte(configContent), 0644); err != nil {
-		t.Fatalf("failed to write config file: %v", err)
-	}
-
-	// Load and validate config
 	cfg, err := LoadConfig()
 	if err != nil {
 		t.Fatalf("failed to load config: %v", err)
 	}
 
-	// Port 99999 is likely in use, so this should fail
-	// But we can't guarantee it for testing, so this test is more of a smoke test
+	// Port 99999 is invalid but we can't guarantee behavior
 	_ = Validate(cfg)
 }
 
 func TestValidateInvalidCommand(t *testing.T) {
-	// Create a temporary config file with invalid command
-	tmpDir := t.TempDir()
-	configFile := filepath.Join(tmpDir, "test_config.yaml")
-
-	configContent := `
+	setupTestConfig(t, `
 mcps:
   - name: test
     port: 3000
-    command: /nonexistent/command/that/does/not/exist
+    command: ""
     args: ["hello"]
-`
+`)
 
-	if err := os.WriteFile(configFile, []byte(configContent), 0644); err != nil {
-		t.Fatalf("failed to write config file: %v", err)
-	}
-
-	// Load and validate config
 	cfg, err := LoadConfig()
 	if err != nil {
 		t.Fatalf("failed to load config: %v", err)
 	}
 
 	if err := Validate(cfg); err == nil {
-		t.Error("validation should fail for command not in PATH")
+		t.Error("validation should fail for empty command")
 	}
 }
 
 func TestValidateWithOptionalEnvFile(t *testing.T) {
-	// Create a temporary config file with optional env_file
-	tmpDir := t.TempDir()
-	configFile := filepath.Join(tmpDir, "test_config.yaml")
-
-	configContent := `
+	setupTestConfig(t, `
 mcps:
   - name: test
     port: 3000
     command: echo
     args: ["hello"]
     env_file: ""
-`
+`)
 
-	if err := os.WriteFile(configFile, []byte(configContent), 0644); err != nil {
-		t.Fatalf("failed to write config file: %v", err)
-	}
-
-	// Load and validate config
 	cfg, err := LoadConfig()
 	if err != nil {
 		t.Fatalf("failed to load config: %v", err)

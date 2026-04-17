@@ -33,9 +33,15 @@ type Config struct {
 }
 
 func LoadConfig() (*Config, error) {
-	data, err := os.ReadFile("config.yaml")
+	const configFile = "config.yaml"
+
+	if _, err := os.Stat(configFile); os.IsNotExist(err) {
+		return nil, fmt.Errorf("config file not found: %s. Create a config.yaml in the current directory", configFile)
+	}
+
+	data, err := os.ReadFile(configFile)
 	if err != nil {
-		return nil, fmt.Errorf("error reading config file: %v (config.yaml)", err)
+		return nil, fmt.Errorf("error reading config file: %v (%s)", err, configFile)
 	}
 
 	var config Config
