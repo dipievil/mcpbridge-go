@@ -5,7 +5,9 @@ import (
 	"net"
 	"os"
 	"os/exec"
+	"path/filepath"
 
+	"github.com/joho/godotenv"
 	"gopkg.in/yaml.v3"
 )
 
@@ -24,6 +26,8 @@ type MCPConfig struct {
 	EnvFile string            `yaml:"env_file,omitempty"`
 	EnvVars map[string]string `yaml:"env_vars,omitempty"`
 	Dir     string            `yaml:"dir,omitempty"`
+	// MergedEnv contains all environment variables ready to use, loaded from env_file + env_vars during validation
+	MergedEnv map[string]string `yaml:"-"`
 }
 
 // Config represents the overall configuration with multiple MCPs.
@@ -73,8 +77,8 @@ func Validate(cfg *Config) error {
 		return err
 	}
 
-	for _, mcp := range cfg.MCPS {
-		if err := validateMCP(mcp); err != nil {
+	for i := range cfg.MCPS {
+		if err := validateMCP(&cfg.MCPS[i]); err != nil {
 			return err
 		}
 	}
@@ -134,8 +138,8 @@ func ResolveCommand(commandName string) (string, error) {
 	return "", fmt.Errorf("command %s not found in registry or PATH", commandName)
 }
 
-// validateMCP checks individual MCP configuration
-func validateMCP(mcp MCPConfig) error {
+// validateMCP checks individual MCP configuration and loads merged environment variables
+func validateMCP(mcp *MCPConfig) error {
 	if mcp.Name == "" {
 		return fmt.Errorf("MCP name is required")
 	}
@@ -148,10 +152,8 @@ func validateMCP(mcp MCPConfig) error {
 		return fmt.Errorf("MCP %s command is required", mcp.Name)
 	}
 
-	if mcp.EnvFile != "" {
-		if _, err := os.Stat(mcp.EnvFile); os.IsNotExist(err) {
-			return fmt.Errorf("env file %s for MCP %s does not exist. Check yaml file", mcp.EnvFile, mcp.Name)
-		}
+	if err := loadMergedEnv(mcp); err != nil {
+		return err
 	}
 
 	ln, err := net.Listen("tcp", fmt.Sprintf(":%d", mcp.Port))
@@ -159,6 +161,41 @@ func validateMCP(mcp MCPConfig) error {
 		return fmt.Errorf("port %d for MCP %s is not available. Check if another process is using it", mcp.Port, mcp.Name)
 	}
 	ln.Close()
+
+	return nil
+}
+
+// loadMergedEnv loads environment variables from env_file (resolved relative to Dir) and merges with env_vars
+func loadMergedEnv(mcp *MCPConfig) error {
+	mcp.MergedEnv = make(map[string]string)
+	for k, v := range mcp.EnvVars {
+		mcp.MergedEnv[k] = v
+	}
+
+	if mcp.EnvFile != "" {
+		envFilePath := mcp.EnvFile
+
+		if !filepath.IsAbs(envFilePath) && mcp.Dir != "" {
+			envFilePath = filepath.Join(mcp.Dir, envFilePath)
+		}
+
+		if _, err := os.Stat(envFilePath); os.IsNotExist(err) {
+			return fmt.Errorf("env file %s for MCP %s does not exist. Check yaml file", envFilePath, mcp.Name)
+		} else if err != nil {
+			return fmt.Errorf("error accessing env file %s for MCP %s: %v", envFilePath, mcp.Name, err)
+		}
+
+		envs, err := godotenv.Read(envFilePath)
+		if err != nil {
+			return fmt.Errorf("error reading env file %s for MCP %s: %v", envFilePath, mcp.Name, err)
+		}
+
+		for k, v := range envs {
+			if _, exists := mcp.EnvVars[k]; !exists {
+				mcp.MergedEnv[k] = v
+			}
+		}
+	}
 
 	return nil
 }

@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"maps"
 	"net/http"
 	"os"
 	"os/exec"
@@ -15,8 +14,6 @@ import (
 	"time"
 
 	"dipievil/mcpbridgego/internal/config"
-
-	"github.com/joho/godotenv"
 )
 
 // JSONRPCMessage represents a JSON-RPC 2.0 message.
@@ -63,20 +60,8 @@ func NewBridge(mcpConfig config.MCPConfig) (*Bridge, error) {
 
 	log.Printf("Starting MCP %s with command: %s %v", mcpConfig.Name, resolvedCommand, mcpConfig.Args)
 
-	envs := make(map[string]string)
-
-	if mcpConfig.EnvFile != "" {
-		existsEnvFile, err := os.Stat(mcpConfig.EnvFile)
-		if err != nil || existsEnvFile.IsDir() {
-			log.Printf("Warning: env file %s for MCP %s does not exist or is a directory. Skipping env file loading.", mcpConfig.EnvFile, mcpConfig.Name)
-		} else {
-			envs, _ = godotenv.Read(mcpConfig.EnvFile)
-			maps.Copy(envs, mcpConfig.EnvVars)
-		}
-	}
-
-	maps.Copy(envs, mcpConfig.EnvVars)
-
+	// Use pre-loaded and merged environment variables from config validation
+	envs := mcpConfig.MergedEnv
 	log.Printf("Environment variables for MCP %s: %s", mcpConfig.Name, maskEnvVars(envs))
 
 	cmd := exec.Command(resolvedCommand, mcpConfig.Args...)

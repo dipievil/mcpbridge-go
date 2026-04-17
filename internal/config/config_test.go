@@ -164,3 +164,138 @@ mcps:
 		t.Errorf("validation should pass when env_file is empty: %v", err)
 	}
 }
+
+func TestValidateEnvFileRelativeToDir(t *testing.T) {
+	tmpDir := t.TempDir()
+	origDir, _ := os.Getwd()
+	os.Chdir(tmpDir)
+	t.Cleanup(func() { os.Chdir(origDir) })
+
+	// Create a subdirectory for the MCP
+	mcpDir := tmpDir + "/mcp-service"
+	os.Mkdir(mcpDir, 0755)
+
+	// Create a .env file in the MCP directory
+	envFile := mcpDir + "/.env"
+	os.WriteFile(envFile, []byte("TEST_VAR=test_value\nANOTHER=another_value"), 0644)
+
+	// Create config.yaml in the root tmpDir
+	configContent := `
+mcps:
+  - name: test-mcp
+    port: 3000
+    command: echo
+    args: ["hello"]
+    dir: ` + mcpDir + `
+    env_file: ".env"
+    env_vars:
+      DIRECT_VAR: "direct_value"
+`
+	configFile := tmpDir + "/config.yaml"
+	os.WriteFile(configFile, []byte(configContent), 0644)
+
+	// Load and validate
+	cfg, err := LoadConfig()
+	if err != nil {
+		t.Fatalf("failed to load config: %v", err)
+	}
+
+	if err := Validate(cfg); err != nil {
+		t.Errorf("validation should pass with env_file relative to dir: %v", err)
+	}
+
+	// Check that MergedEnv was populated
+	if cfg.MCPS[0].MergedEnv == nil {
+		t.Error("MergedEnv should not be nil after validation")
+	}
+
+	// Check that env file variables are loaded
+	if val, exists := cfg.MCPS[0].MergedEnv["TEST_VAR"]; !exists || val != "test_value" {
+		t.Errorf("expected TEST_VAR=test_value in MergedEnv, got %v", cfg.MCPS[0].MergedEnv)
+	}
+
+	// Check that direct env_vars take precedence (though not overridden in this case)
+	if val, exists := cfg.MCPS[0].MergedEnv["DIRECT_VAR"]; !exists || val != "direct_value" {
+		t.Errorf("expected DIRECT_VAR=direct_value in MergedEnv, got %v", cfg.MCPS[0].MergedEnv)
+	}
+}
+
+func TestValidateEnvFileMissingFails(t *testing.T) {
+	tmpDir := t.TempDir()
+	origDir, _ := os.Getwd()
+	os.Chdir(tmpDir)
+	t.Cleanup(func() { os.Chdir(origDir) })
+
+	// Create a subdirectory but WITHOUT a .env file
+	mcpDir := tmpDir + "/mcp-service"
+	os.Mkdir(mcpDir, 0755)
+
+	configContent := `
+mcps:
+  - name: test-mcp
+    port: 3000
+    command: echo
+    args: ["hello"]
+    dir: ` + mcpDir + `
+    env_file: ".env"
+`
+	configFile := tmpDir + "/config.yaml"
+	os.WriteFile(configFile, []byte(configContent), 0644)
+
+	cfg, err := LoadConfig()
+	if err != nil {
+		t.Fatalf("failed to load config: %v", err)
+	}
+
+	// Validation should FAIL because .env doesn't exist
+	if err := Validate(cfg); err == nil {
+		t.Error("validation should fail when env_file does not exist at resolved path")
+	}
+}
+
+func TestEnvVarsOverrideEnvFile(t *testing.T) {
+	tmpDir := t.TempDir()
+	origDir, _ := os.Getwd()
+	os.Chdir(tmpDir)
+	t.Cleanup(func() { os.Chdir(origDir) })
+
+	mcpDir := tmpDir + "/mcp-service"
+	os.Mkdir(mcpDir, 0755)
+
+	// Create a .env file with some variables
+	envFile := mcpDir + "/.env"
+	os.WriteFile(envFile, []byte("VAR1=from_file\nVAR2=also_from_file"), 0644)
+
+	configContent := `
+mcps:
+  - name: test-mcp
+    port: 3000
+    command: echo
+    args: ["hello"]
+    dir: ` + mcpDir + `
+    env_file: ".env"
+    env_vars:
+      VAR1: "from_vars"
+`
+	configFile := tmpDir + "/config.yaml"
+	os.WriteFile(configFile, []byte(configContent), 0644)
+
+	cfg, err := LoadConfig()
+	if err != nil {
+		t.Fatalf("failed to load config: %v", err)
+	}
+
+	if err := Validate(cfg); err != nil {
+		t.Errorf("validation should pass: %v", err)
+	}
+
+	// VAR1 should come from env_vars (takes precedence), not from .env
+	if val, exists := cfg.MCPS[0].MergedEnv["VAR1"]; !exists || val != "from_vars" {
+		t.Errorf("expected VAR1=from_vars (env_vars takes precedence), got %v", cfg.MCPS[0].MergedEnv["VAR1"])
+	}
+
+	// VAR2 should come from .env
+	if val, exists := cfg.MCPS[0].MergedEnv["VAR2"]; !exists || val != "also_from_file" {
+		t.Errorf("expected VAR2=also_from_file in MergedEnv, got %v", cfg.MCPS[0].MergedEnv)
+	}
+}
