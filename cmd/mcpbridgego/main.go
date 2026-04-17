@@ -18,8 +18,6 @@ import (
 	"dipievil/mcpbridgego/internal/pidmanager"
 )
 
-var buildVersion = "dev"
-
 // startDaemon starts the app in background.
 func startDaemon(pm *pidmanager.Manager) error {
 
@@ -167,6 +165,8 @@ func parseArgs(osArgs []string) (config.AppArgs, error) {
 			appArgs.GetStatus = true
 		case "-r", "--run":
 			appArgs.RunForeground = true
+		case "-v", "--version":
+			appArgs.ShowVersion = true
 		default:
 			return config.AppArgs{}, fmt.Errorf("unknown argument: %s", arg)
 		}
@@ -205,6 +205,8 @@ func validateConflictArgs(appArgs config.AppArgs) error {
 
 	return nil
 }
+
+var buildVersion = "dev"
 
 func main() {
 
@@ -260,6 +262,11 @@ func main() {
 		if err := runForeground(pm); err != nil {
 			log.Fatal(err)
 		}
+		return
+	}
+
+	if appArgs.ShowVersion {
+		output.PrintVersion(buildVersion)
 		return
 	}
 
