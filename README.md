@@ -233,6 +233,13 @@ mcps:
 
 Each MCP is exposed with three HTTP endpoints:
 
+- `POST /rpc`: JSON-RPC method calls
+- `GET /sse`: Server-Sent Events stream
+- `GET /health`: Health check
+- `GET /`: Service info with available endpoints (JSON)
+
+**CORS:** All endpoints respond to requests from any origin (Access-Control-Allow-Origin: *)
+
 #### 1. JSON-RPC Endpoint (`/rpc`)
 
 For standard JSON-RPC 2.0 method calls:
@@ -447,7 +454,7 @@ make test-all
 
 **E2E Test Structure:**
 
-```
+```plaintext
 tests/
 ├── e2e_test.go              # HTTP/JSON-RPC E2E tests (4 test cases)
 ├── e2e_sse_test.go          # Server-Sent Events streaming tests (4 test cases)
