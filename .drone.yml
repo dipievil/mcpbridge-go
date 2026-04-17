@@ -30,6 +30,7 @@ steps:
   - name: build
     image: golang:1.26.2-alpine
     commands:
+      - apk add --no-cache make
       - make build
     when:
       event:
@@ -81,14 +82,11 @@ steps:
   - name: deploy
     environment:
     commands:
-      - cd bin 
+      - make build
       - CURRENT_PATH=$(pwd)
       - echo "CURRENT_PATH=$CURRENT_PATH"
-      - cd /opt/mcpbridge-go
-      - ./mcpbridgego --stop || true
-      - cd ${CURRENT_PATH}
-      - make build
-      - cp bin/mcpbridgego /opt/mcpbridge-go
+      - /opt/mcpbridge-go/mcpbridgego --stop
+      - cp ./bin/mcpbridgego /opt/mcpbridge-go
       - cd /opt/mcpbridge-go
       - ./mcpbridgego --start
        
